@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+games/
+logs/
+overlays/
+release/
+*.log
+.DS_Store

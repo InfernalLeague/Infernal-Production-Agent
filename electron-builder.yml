@@ -1,0 +1,53 @@
+# Balení Infernal Production Agenta do Windows .exe (Fáze 1).
+# Viz docs/ROADMAP.md. Build:  npm run dist:win
+#
+# DŮLEŽITÉ: publish.owner musí být tvůj GitHub účet (repo pro auto-update).
+# Auto-update (electron-updater) čte latest.yml + installer z GitHub Releases
+# tohoto repa. Bez správného owner/repo se update nestáhne.
+
+appId: gg.infernal.production-agent
+productName: Infernal Production Agent
+
+directories:
+  output: release
+  buildResources: build
+
+# Co jde DO app.asar (kód). public/ a overlays/ jdou přes extraResources níž,
+# protože express.static neumí spolehlivě servírovat z asar archivu.
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+
+# Backend (dist) rozbalit z asaru — jistota pro dynamický ESM import za běhu.
+asarUnpack:
+  - dist/**/*
+
+# Read-only assety servírované Expressem. V zabalené appce leží v
+# resources/public a resources/overlays; main.mjs nastaví
+# INFERNAL_ASSETS_DIR=process.resourcesPath, takže config.ts je tam najde.
+extraResources:
+  - from: public
+    to: public
+  - from: overlays
+    to: overlays
+
+win:
+  target:
+    - nsis
+  # icon: build/icon.ico   # doplnit až bude ikona (256x256+); jinak default Electron
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  # Název souboru na disku s pomlčkami, aby seděl na url v latest.yml (jinak by
+  # electron-updater blockmap/installer nenašel). Nutné pro upload v CI.
+  artifactName: Infernal-Production-Agent-Setup-${version}.${ext}
+
+# Auto-update feed → GitHub Releases repa InfernalLeague/Infernal-Production-Agent.
+publish:
+  provider: github
+  owner: InfernalLeague
+  repo: Infernal-Production-Agent

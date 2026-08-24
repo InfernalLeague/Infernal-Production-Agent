@@ -1,0 +1,51 @@
+name: Release
+
+# Spustí se po pushnutí tagu vX.Y.Z (odpovídá version v package.json).
+# Postaví Windows installer a nahraje ho na GitHub Releases JEDNÍM krokem
+# (žádný souběh electron-builder publisheru → žádné duplicitní drafty).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # aby GITHUB_TOKEN mohl vytvořit release
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Závislosti Agenta i obou overlayů (monorepo).
+      - name: Install deps (agent)
+        run: npm ci
+      - name: Install deps (overlay ingame)
+        run: npm ci
+        working-directory: overlays-src/ingame
+      - name: Install deps (overlay pickban)
+        run: npm ci
+        working-directory: overlays-src/pickban
+
+      # tsc backend + vite build obou overlayů → overlays/
+      - name: Build (backend + overlays)
+        run: npm run build:all
+
+      # Installer + latest.yml + blockmap do release/ (bez publikace).
+      - name: Build installer
+        run: npx electron-builder --win --publish never
+
+      # Nahrání všech artefaktů do jednoho releasu pro tag, který build spustil.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/Infernal-Production-Agent-Setup-*.exe
+            release/Infernal-Production-Agent-Setup-*.exe.blockmap
+            release/latest.yml
+          draft: false
+          fail_on_unmatched_files: true

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api *)",
+      "WebFetch(domain:bluebottle.gg)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ping -n 4 127.0.0.1)",
+      "Bash(curl -s -o nul -w \"%{http_code}\" http://localhost:5173)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(npx tsc *)",
+      "Bash(npm list *)",
+      "Bash(npx vite *)",
+      "Bash(node -e ' *)",
+      "Bash(npx vue-tsc *)",
+      "WebFetch(domain:raw.communitydragon.org)",
+      "Bash(Select-Object FullName)",
+      "Bash(Format-List)",
+      "Bash(python3 -c ' *)",
+      "Bash(gh repo *)"
+    ]
+  }
+}
