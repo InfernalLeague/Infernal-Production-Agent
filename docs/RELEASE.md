@@ -32,6 +32,29 @@ verzi automaticky (stáhne na pozadí, nainstaluje při zavření).
 3. Hotovo. Každá appka po příštím spuštění najde `latest.yml`, porovná verzi a
    stáhne update.
 
+## Vydání přes CI (doporučeno)
+
+Repo má GitHub Actions workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml),
+který po pushnutí tagu `vX.Y.Z` sám zbuildí backend + overlaye, postaví installer
+a nahraje ho na Releases **jedním krokem** (žádné duplicitní drafty, build neběží
+u tebe lokálně). Postup vydání:
+
+1. Zvedni `version` v `package.json` (např. `0.1.1`).
+2. Commitni a otaguj:
+
+   ```bash
+   git commit -am "release 0.1.1"
+   git push
+   git tag v0.1.1
+   git push origin v0.1.1
+   ```
+
+3. Sleduj běh v záložce **Actions** na GitHubu. Po doběhnutí je release rovnou
+   publikovaný (ne draft) → auto-update ho vidí. `GH_TOKEN` u sebe **nepotřebuješ**,
+   CI používá vestavěný `GITHUB_TOKEN`.
+
+**Pozn.:** tag musí sedět na `version` v `package.json` (tag `v0.1.1` ↔ version `0.1.1`).
+
 ## Lokální build bez publikace
 
 - `npm run dist:win` — postaví installer do `release/`, nic nenahrává.

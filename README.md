@@ -68,8 +68,8 @@ Overlaye jsou pro OBS na:
 - **Ingame:**  `http://localhost:4700/overlay/ingame`
 - **Pick/Ban:** `http://localhost:4700/overlay/pickban`
 
-Zdroje overlayů jsou sourozenci tohoto repa (`../lol-ingame-overlay`,
-`../lol-pickban-overlay`); přepíšeš přes `INGAME_OVERLAY_DIR` / `PICKBAN_OVERLAY_DIR`.
+Zdroje overlayů jsou v monorepu (`overlays-src/ingame`, `overlays-src/pickban`);
+přepíšeš přes `INGAME_OVERLAY_DIR` / `PICKBAN_OVERLAY_DIR`.
 Ingame overlay pořád potřebuje běžící **LeagueBroadcast** (`localhost:58869`) jako
 zdroj live dat.
 
