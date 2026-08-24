@@ -186,6 +186,7 @@
           <code class="overlay-url" id="urlPickban"></code>
           <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlPickban">Kopírovat</button>
           <button class="btn btn-sm btn-ghost" data-open="urlPickban">Otevřít</button>
+          <label class="mock-toggle"><input type="checkbox" class="mock-cb" data-mock="pickban" checked /> Náhled s mock daty</label>
         </div>
         <div class="overlay-preview"><iframe data-lazy="pickban" title="Pick/Ban overlay"></iframe></div>
       </div>
@@ -196,8 +197,9 @@
           <code class="overlay-url" id="urlIngame"></code>
           <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlIngame">Kopírovat</button>
           <button class="btn btn-sm btn-ghost" data-open="urlIngame">Otevřít</button>
+          <label class="mock-toggle"><input type="checkbox" class="mock-cb" data-mock="ingame" checked /> Náhled s mock daty</label>
         </div>
-        <p class="hint">Ingame overlay potřebuje běžící <b>LeagueBroadcast</b> (localhost:58869) jako zdroj live dat.</p>
+        <p class="hint">Náhled běží na mock datech. Pro živý provoz odškrtni mock — ingame overlay pak potřebuje běžící <b>LeagueBroadcast</b> (localhost:58869).</p>
         <div class="overlay-preview"><iframe data-lazy="ingame" title="Ingame overlay"></iframe></div>
       </div>
     </section>

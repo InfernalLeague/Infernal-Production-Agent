@@ -9,8 +9,10 @@ import PatchPanel      from '@/components/PatchPanel/PatchPanel.vue'
 import SmiteReaction   from '@/components/SmiteReaction/SmiteReaction.vue'
 import DevMock from '@/components/DevMock/DevMock.vue'
 
-// VITE_MOCK=false npm run dev  → real data, hot reload
-const DEV = import.meta.env.DEV && import.meta.env.VITE_MOCK !== 'false'
+// Mock režim: buď dev build (VITE_MOCK=false ho vypne), NEBO ?mock v URL
+// (funguje i v produkčním buildu — náhled v dashboardu bez hry / LeagueBroadcastu).
+const DEV = new URLSearchParams(location.search).has('mock')
+  || (import.meta.env.DEV && import.meta.env.VITE_MOCK !== 'false')
 </script>
 
 <template>

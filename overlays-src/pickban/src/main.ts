@@ -75,9 +75,10 @@ app.provide(ClientKey, client)
 
 app.mount('#app')
 
-// In dev mock mode the real client is shadowed by DevMock's injected mock client.
-// Skip connect() to avoid flooding the console with WebSocket reconnect errors.
-const DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_MOCK !== 'false'
+// V mock režimu (?mock v URL, nebo dev build) shadowuje DevMock reálného klienta.
+// Přeskoč connect(), ať se nespamuje konzole WebSocket chybami k LeagueBroadcastu.
+const DEV_MOCK = new URLSearchParams(location.search).has('mock')
+  || (import.meta.env.DEV && import.meta.env.VITE_MOCK !== 'false')
 if (!DEV_MOCK) {
   client.connect()
 }

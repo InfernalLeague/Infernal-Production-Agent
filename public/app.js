@@ -277,10 +277,24 @@ function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 // --- navigace (taby) --------------------------------------------------------
 const overlayUrl = (name) => `${location.origin}/overlay/${name}`;
 
+function overlayMock(name) {
+  const cb = document.querySelector(`.mock-cb[data-mock="${name}"]`);
+  return cb ? cb.checked : false;
+}
+
+// Náhled: přidá ?mock=1, pokud je zaškrtnutý přepínač (overlay pak běží na mock
+// datech bez hry / LeagueBroadcastu). Kopírovaná OBS URL zůstává bez parametru.
 function loadOverlay(name) {
   const iframe = document.querySelector(`iframe[data-lazy="${name}"]`);
-  if (iframe && !iframe.src) iframe.src = overlayUrl(name) + "/";
+  if (!iframe) return;
+  const want = overlayUrl(name) + "/" + (overlayMock(name) ? "?mock=1" : "");
+  if (iframe.getAttribute("data-src") !== want) {
+    iframe.setAttribute("data-src", want);
+    iframe.src = want;
+  }
 }
+
+document.querySelectorAll(".mock-cb").forEach((cb) => (cb.onchange = () => loadOverlay(cb.dataset.mock)));
 
 function activeSub() {
   const b = document.querySelector(".sub-tab.active");

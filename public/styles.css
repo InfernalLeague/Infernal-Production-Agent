@@ -357,3 +357,7 @@ body[data-prod="kick"] .brand-logo { filter: drop-shadow(0 0 8px rgba(83,252,24,
   .dash-grid { grid-template-columns: 1fr; }
   .prod-choices { grid-template-columns: 1fr; }
 }
+
+/* mock přepínač v overlay liště */
+.mock-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; margin-left: auto; }
+.mock-toggle input { accent-color: var(--flame); cursor: pointer; }

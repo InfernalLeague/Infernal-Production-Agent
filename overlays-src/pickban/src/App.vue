@@ -3,8 +3,10 @@ import PickBanScreen   from '@/components/PickBan/PickBanScreen.vue'
 import ConnectionStatus from '@/components/ConnectionStatus/ConnectionStatus.vue'
 import DevMock         from '@/components/DevMock/DevMock.vue'
 
-// VITE_MOCK=false npm run dev  → real data (connect to LeagueBroadcast)
-const DEV = import.meta.env.DEV && import.meta.env.VITE_MOCK !== 'false'
+// Mock režim: dev build (VITE_MOCK=false ho vypne), NEBO ?mock v URL
+// (funguje i v produkčním buildu — náhled bez LeagueBroadcastu).
+const DEV = new URLSearchParams(location.search).has('mock')
+  || (import.meta.env.DEV && import.meta.env.VITE_MOCK !== 'false')
 </script>
 
 <template>
