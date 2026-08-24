@@ -21,6 +21,16 @@ jobs:
         with:
           node-version: 20
 
+      # Pojistka: tag musí sedět na version v package.json. Bez toho by se
+      # vydal installer se špatným číslem verze a auto-update by ho neviděl.
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json=$PKG  tag=$TAG"
+          test "$PKG" = "$TAG" || { echo "::error::Tag v$TAG != package.json $PKG — zvedni version a otaguj správný commit."; exit 1; }
+
       # Závislosti Agenta i obou overlayů (monorepo).
       - name: Install deps (agent)
         run: npm ci
