@@ -342,9 +342,10 @@ body[data-prod="kick"] .brand-logo { filter: drop-shadow(0 0 8px rgba(83,252,24,
 .prod-choice:hover { background: var(--panel3); transform: translateY(-2px); }
 .prod-choice[data-prod="twitch"]:hover { border-color: #9146ff; box-shadow: 0 0 18px -6px #9146ff; }
 .prod-choice[data-prod="kick"]:hover { border-color: #53fc18; box-shadow: 0 0 18px -6px #53fc18; }
-.prod-swatch { width: 44px; height: 44px; border-radius: 12px; }
-.prod-swatch.twitch { background: #9146ff; box-shadow: 0 0 16px -3px #9146ff; }
-.prod-swatch.kick { background: #53fc18; box-shadow: 0 0 16px -3px #53fc18; }
+.prod-logo { width: 60px; height: 60px; border-radius: 14px; display: grid; place-items: center; background: var(--panel3); border: 1px solid var(--border2); }
+.prod-logo svg { width: 60%; height: 60%; display: block; }
+.prod-logo.twitch { color: #9146ff; border-color: rgba(145,70,255,.4); box-shadow: 0 0 18px -6px #9146ff; }
+.prod-logo.kick { color: #53fc18; border-color: rgba(83,252,24,.4); box-shadow: 0 0 18px -6px #53fc18; }
 .prod-name { font-family: var(--disp); font-weight: 700; font-size: 15px; }
 .prod-plat { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 
@@ -361,3 +362,7 @@ body[data-prod="kick"] .brand-logo { filter: drop-shadow(0 0 8px rgba(83,252,24,
 /* mock přepínač v overlay liště */
 .mock-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; margin-left: auto; }
 .mock-toggle input { accent-color: var(--flame); cursor: pointer; }
+
+/* Data Collection: horní lišta panelu s New Game */
+.collection-bar { display: flex; justify-content: space-between; align-items: center; }
+.section-title { font-family: var(--disp); font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }

@@ -19,8 +19,6 @@
     </div>
     <div class="topbar-right">
       <button id="prodSwitch" class="prod-pill" title="Změnit produkci">—</button>
-      <span class="phase">Fáze 1A · Live → TXT</span>
-      <button id="openNewGame" class="btn btn-ghost btn-sm">+ New Game</button>
     </div>
   </header>
 
@@ -71,6 +69,10 @@
 
     <!-- ============ DATA COLLECTION ============ -->
     <section class="tabview" data-view="collection">
+      <div class="collection-bar">
+        <span class="section-title">Data Collection</span>
+        <button id="openNewGame" class="btn btn-ghost btn-sm">+ New Game</button>
+      </div>
       <div class="status-grid">
         <div class="status-cell">
           <span class="status-label">League Client</span>
@@ -257,12 +259,16 @@
       <p class="hint">Vyber produkci pro dnešní vysílání — podle ní se přebarví rozhraní.</p>
       <div class="prod-choices">
         <button class="prod-choice" data-prod="twitch">
-          <span class="prod-swatch twitch"></span>
+          <span class="prod-logo twitch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
+          </span>
           <span class="prod-name">Produkce 1</span>
           <span class="prod-plat">Twitch</span>
         </button>
         <button class="prod-choice" data-prod="kick">
-          <span class="prod-swatch kick"></span>
+          <span class="prod-logo kick">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M6 4h5v9.5L19 4h6l-9.5 11L25 28h-6l-8-10.5V28H6z"/></svg>
+          </span>
           <span class="prod-name">Produkce 2</span>
           <span class="prod-plat">Kick</span>
         </button>

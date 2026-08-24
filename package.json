@@ -1,6 +1,6 @@
 {
   "name": "infernal-production-agent",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Infernal League - Production Agent. Sbírá live data ze spectatované LoL hry, spojí je s post-game screenshotem, potvrdí a exportuje. Fáze 1A.",
   "type": "module",
   "main": "electron/main.mjs",

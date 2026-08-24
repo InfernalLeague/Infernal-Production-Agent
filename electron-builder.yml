@@ -42,6 +42,12 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
+  # Zástupci (plocha + start menu) s logem — ikona se bere z ikony .exe (win.icon).
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
   # Název souboru na disku s pomlčkami, aby seděl na url v latest.yml (jinak by
   # electron-updater blockmap/installer nenašel). Nutné pro upload v CI.
   artifactName: Infernal-Production-Agent-Setup-${version}.${ext}
