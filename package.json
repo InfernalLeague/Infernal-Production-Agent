@@ -12,7 +12,8 @@
     "mock": "tsx src/index.ts --mock",
     "build": "tsc",
     "build:overlays": "node scripts/build-overlays.mjs",
-    "build:all": "npm run build && npm run build:overlays",
+    "build:icon": "node scripts/make-icon.mjs",
+    "build:all": "npm run build && npm run build:overlays && npm run build:icon",
     "serve": "node dist/index.js",
     "app": "electron .",
     "app:mock": "electron . --mock",
@@ -32,6 +33,7 @@
     "@types/ws": "^8.5.10",
     "electron": "^43.4.1",
     "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0"
   }

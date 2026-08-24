@@ -213,3 +213,68 @@ table.sb { width: 100%; border-collapse: collapse; font-size: 13px; }
   .draft { grid-template-columns: 1fr; }
   .export-bar { flex-direction: column; align-items: stretch; }
 }
+
+/* ---------- brand logo ---------- */
+.brand-logo { width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255,107,26,.5)); }
+
+/* ---------- hlavní navigace (taby) ---------- */
+.mainnav {
+  display: flex; gap: 4px; align-items: flex-end;
+  padding: 0 22px; border-bottom: 1px solid var(--border);
+  background: rgba(13, 15, 20, .5);
+}
+.nav-tab {
+  background: transparent; border: 0; border-bottom: 2px solid transparent;
+  color: var(--muted); cursor: pointer;
+  font-family: var(--disp); font-weight: 600; font-size: 13px; letter-spacing: 1px;
+  padding: 13px 16px; margin-bottom: -1px; transition: color .15s, border-color .15s;
+}
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { color: var(--flame); border-bottom-color: var(--flame); }
+
+/* ---------- taby: přepínání viditelnosti ---------- */
+.tabview { display: none; }
+.tabview.active { display: flex; flex-direction: column; gap: 20px; }
+.tabview .status-grid { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+/* ---------- pod-navigace (overlays) ---------- */
+.subnav { display: flex; gap: 8px; }
+.sub-tab {
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 999px;
+  color: var(--muted); cursor: pointer;
+  font-family: var(--disp); font-weight: 600; font-size: 12px; letter-spacing: .6px;
+  padding: 7px 16px; transition: color .15s, border-color .15s, background .15s;
+}
+.sub-tab:hover { color: var(--text); border-color: var(--border2); }
+.sub-tab.active { color: #1a1008; background: linear-gradient(180deg, var(--flame2), var(--flame)); border-color: var(--flame); }
+
+.subview { display: none; }
+.subview.active { display: block; }
+
+/* ---------- overlay: URL lišta + náhled ---------- */
+.overlay-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 16px; margin-bottom: 14px;
+}
+.overlay-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-family: var(--disp); }
+.overlay-url {
+  flex: 1; min-width: 220px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px; color: var(--flame2); background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px;
+  overflow-x: auto; white-space: nowrap;
+}
+.overlay-preview {
+  width: 1024px; max-width: 100%; height: 576px; position: relative; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius); background: #000;
+  box-shadow: var(--shadow);
+}
+.overlay-preview iframe {
+  position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0;
+  transform: scale(.53333); transform-origin: top left;
+}
+
+/* ---------- placeholder (VODs) ---------- */
+.soon { text-align: center; padding: 70px 20px; border: 1px dashed var(--border2); border-radius: var(--radius); background: var(--panel); }
+.soon h2 { font-family: var(--disp); font-size: 18px; letter-spacing: 1px; margin: 6px 0; }
+.soon p { color: var(--muted); margin: 0; line-height: 1.7; }

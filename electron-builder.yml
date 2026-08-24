@@ -35,7 +35,7 @@ extraResources:
 win:
   target:
     - nsis
-  # icon: build/icon.ico   # doplnit až bude ikona (256x256+); jinak default Electron
+  icon: build/icon.ico   # logo ligy; generuje scripts/make-icon.mjs
 
 nsis:
   oneClick: false

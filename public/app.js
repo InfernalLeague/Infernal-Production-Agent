@@ -3,7 +3,6 @@ const $ = (id) => document.getElementById(id);
 
 let state = null;
 let currentWinner = "";
-let didAutoOpen = false;
 
 // --- Data Dragon: champion ikony -------------------------------------------
 let ddVersion = null;
@@ -124,7 +123,6 @@ function render(s) {
     statusValue($("stCurrent"), "NONE", "bad");
     $("gamePanel").hidden = true;
     $("emptyState").hidden = false;
-    if (!didAutoOpen) { openNewGame(); didAutoOpen = true; }
     return;
   }
 
@@ -273,6 +271,44 @@ function fmtClock(sec) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// --- navigace (taby) --------------------------------------------------------
+const overlayUrl = (name) => `${location.origin}/overlay/${name}`;
+
+function loadOverlay(name) {
+  const iframe = document.querySelector(`iframe[data-lazy="${name}"]`);
+  if (iframe && !iframe.src) iframe.src = overlayUrl(name) + "/";
+}
+
+function activeSub() {
+  const b = document.querySelector(".sub-tab.active");
+  return b ? b.dataset.sub : "pickban";
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".nav-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tabview").forEach((v) => v.classList.toggle("active", v.dataset.view === tab));
+  if (tab === "overlays") loadOverlay(activeSub()); // načti iframe až při zobrazení
+}
+
+function switchSub(sub) {
+  document.querySelectorAll(".sub-tab").forEach((b) => b.classList.toggle("active", b.dataset.sub === sub));
+  document.querySelectorAll(".subview").forEach((v) => v.classList.toggle("active", v.dataset.subview === sub));
+  loadOverlay(sub);
+}
+
+document.querySelectorAll(".nav-tab").forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
+document.querySelectorAll(".sub-tab").forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
+
+// URL overlayů + tlačítka kopírovat / otevřít
+$("urlPickban").textContent = overlayUrl("pickban");
+$("urlIngame").textContent = overlayUrl("ingame");
+document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
+  const text = $(b.dataset.copy).textContent;
+  try { await navigator.clipboard.writeText(text); toast("URL zkopírováno", "ok"); }
+  catch { toast("Kopírování selhalo", "err"); }
+}));
+document.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => window.open($(b.dataset.open).textContent, "_blank")));
 
 connectWs();
 initDdragon().then(() => { if (state) render(state); }).catch(() => { /* offline → monogramy */ });

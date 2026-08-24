@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Infernal Production Agent</title>
+  <link rel="icon" href="logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -12,7 +13,7 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="flame">🔥</span>
+      <img class="brand-logo" src="logo.png" alt="Infernal League" />
       <span class="brand-text">INFERNAL <b>PRODUCTION AGENT</b></span>
       <span id="mockBadge" class="badge badge-mock" hidden>MOCK</span>
     </div>
@@ -22,111 +23,161 @@
     </div>
   </header>
 
-  <!-- Stavové řádky (workflow §4) -->
-  <section class="status-grid">
-    <div class="status-cell">
-      <span class="status-label">League Client</span>
-      <span class="status-value"><i class="dot"></i><b id="stClient">—</b></span>
-    </div>
-    <div class="status-cell">
-      <span class="status-label">League Game</span>
-      <span class="status-value"><i class="dot"></i><b id="stGame">—</b></span>
-    </div>
-    <div class="status-cell">
-      <span class="status-label">Live Data API</span>
-      <span class="status-value"><i class="dot"></i><b id="stApi">—</b></span>
-    </div>
-    <div class="status-cell">
-      <span class="status-label">Current Game</span>
-      <span class="status-value"><i class="dot"></i><b id="stCurrent">NONE</b></span>
-    </div>
-  </section>
+  <!-- Hlavní navigace -->
+  <nav class="mainnav">
+    <button class="nav-tab active" data-tab="collection">Data Collection</button>
+    <button class="nav-tab" data-tab="overlays">Overlays</button>
+    <button class="nav-tab" data-tab="vods">VODs</button>
+  </nav>
 
   <main>
-    <!-- EMPTY STATE (žádná hra) -->
-    <section id="emptyState" class="empty" hidden>
-      <div class="empty-flame">🔥</div>
-      <h2>Žádná aktivní hra</h2>
-      <p>Založ novou hru a agent začne sbírat live data ze spectatované partie.</p>
-      <button id="emptyCreate" class="btn btn-primary">CREATE GAME</button>
+    <!-- ============ DATA COLLECTION ============ -->
+    <section class="tabview active" data-view="collection">
+      <!-- Stavové řádky (workflow §4) -->
+      <div class="status-grid">
+        <div class="status-cell">
+          <span class="status-label">League Client</span>
+          <span class="status-value"><i class="dot"></i><b id="stClient">—</b></span>
+        </div>
+        <div class="status-cell">
+          <span class="status-label">League Game</span>
+          <span class="status-value"><i class="dot"></i><b id="stGame">—</b></span>
+        </div>
+        <div class="status-cell">
+          <span class="status-label">Live Data API</span>
+          <span class="status-value"><i class="dot"></i><b id="stApi">—</b></span>
+        </div>
+        <div class="status-cell">
+          <span class="status-label">Current Game</span>
+          <span class="status-value"><i class="dot"></i><b id="stCurrent">NONE</b></span>
+        </div>
+      </div>
+
+      <!-- EMPTY STATE (žádná hra) -->
+      <section id="emptyState" class="empty" hidden>
+        <div class="empty-flame">🔥</div>
+        <h2>Žádná aktivní hra</h2>
+        <p>Založ novou hru a agent začne sbírat live data ze spectatované partie.</p>
+        <button id="emptyCreate" class="btn btn-primary">CREATE GAME</button>
+      </section>
+
+      <!-- LIVE / GAME PANEL -->
+      <section id="gamePanel" class="panel" hidden>
+        <div class="game-head">
+          <div>
+            <div class="matchup"><span id="mTeam1"></span> <span class="vs">vs</span> <span id="mTeam2"></span></div>
+            <div class="submeta"><span id="mGame"></span> · <span id="mId"></span></div>
+          </div>
+          <div class="game-state">
+            <span id="firstBlood" class="fb-pill" hidden></span>
+            <span id="phaseBadge" class="badge">—</span>
+            <span id="clock" class="clock">--:--</span>
+          </div>
+        </div>
+
+        <!-- DRAFT (champ select z LCU) -->
+        <div id="draftPanel" class="draft" hidden>
+          <div class="draft-col">
+            <div class="draft-side side-blue" id="draftBlueName">BLUE</div>
+            <div class="draft-label">Bans</div>
+            <div class="draft-bans" id="blueBans"></div>
+            <div class="draft-label">Picks</div>
+            <div class="draft-picks" id="bluePicks"></div>
+          </div>
+          <div class="draft-col">
+            <div class="draft-side side-red" id="draftRedName">RED</div>
+            <div class="draft-label">Bans</div>
+            <div class="draft-bans" id="redBans"></div>
+            <div class="draft-label">Picks</div>
+            <div class="draft-picks" id="redPicks"></div>
+          </div>
+        </div>
+
+        <!-- SCOREBOARD -->
+        <div class="sb-header">
+          <div class="sb-team blue">
+            <span class="tag side-blue">BLUE</span>
+            <span class="sb-team-name" id="blueTeamName">—</span>
+          </div>
+          <div class="sb-score">
+            <span class="s-blue" id="blueKills">0</span>
+            <span class="s-dash">–</span>
+            <span class="s-red" id="redKills">0</span>
+          </div>
+          <div class="sb-team red">
+            <span class="sb-team-name" id="redTeamName">—</span>
+            <span class="tag side-red">RED</span>
+          </div>
+        </div>
+
+        <div class="scoreboards">
+          <div class="team-block accent-blue">
+            <table class="sb">
+              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>KDA</th><th>CS</th><th>Vis</th><th>P</th></tr></thead>
+              <tbody id="blueRows"></tbody>
+            </table>
+          </div>
+          <div class="team-block accent-red">
+            <table class="sb">
+              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>KDA</th><th>CS</th><th>Vis</th><th>P</th></tr></thead>
+              <tbody id="redRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="export-bar">
+          <div class="winner-pick">
+            <span class="field-label">Winner</span>
+            <div id="winnerSeg" class="seg"></div>
+          </div>
+          <div class="export-actions">
+            <button id="endBtn" class="btn">Ukončit hru ručně</button>
+            <button id="exportBtn" class="btn btn-primary">EXPORT .TXT</button>
+            <button id="dbBtn" class="btn btn-disabled" disabled title="Fáze 2">Send to database — Coming later</button>
+          </div>
+        </div>
+        <p class="hint" id="exportHint"></p>
+      </section>
     </section>
 
-    <!-- LIVE / GAME PANEL -->
-    <section id="gamePanel" class="panel" hidden>
-      <div class="game-head">
-        <div>
-          <div class="matchup"><span id="mTeam1"></span> <span class="vs">vs</span> <span id="mTeam2"></span></div>
-          <div class="submeta"><span id="mGame"></span> · <span id="mId"></span></div>
+    <!-- ============ OVERLAYS ============ -->
+    <section class="tabview" data-view="overlays">
+      <nav class="subnav">
+        <button class="sub-tab active" data-sub="pickban">Pick / Ban</button>
+        <button class="sub-tab" data-sub="ingame">Ingame</button>
+      </nav>
+
+      <div class="subview active" data-subview="pickban">
+        <div class="overlay-bar">
+          <span class="overlay-label">OBS Browser Source URL</span>
+          <code class="overlay-url" id="urlPickban"></code>
+          <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlPickban">Kopírovat</button>
+          <button class="btn btn-sm btn-ghost" data-open="urlPickban">Otevřít</button>
         </div>
-        <div class="game-state">
-          <span id="firstBlood" class="fb-pill" hidden></span>
-          <span id="phaseBadge" class="badge">—</span>
-          <span id="clock" class="clock">--:--</span>
-        </div>
+        <div class="overlay-preview"><iframe data-lazy="pickban" title="Pick/Ban overlay"></iframe></div>
       </div>
 
-      <!-- DRAFT (champ select z LCU) -->
-      <div id="draftPanel" class="draft" hidden>
-        <div class="draft-col">
-          <div class="draft-side side-blue" id="draftBlueName">BLUE</div>
-          <div class="draft-label">Bans</div>
-          <div class="draft-bans" id="blueBans"></div>
-          <div class="draft-label">Picks</div>
-          <div class="draft-picks" id="bluePicks"></div>
+      <div class="subview" data-subview="ingame">
+        <div class="overlay-bar">
+          <span class="overlay-label">OBS Browser Source URL</span>
+          <code class="overlay-url" id="urlIngame"></code>
+          <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlIngame">Kopírovat</button>
+          <button class="btn btn-sm btn-ghost" data-open="urlIngame">Otevřít</button>
         </div>
-        <div class="draft-col">
-          <div class="draft-side side-red" id="draftRedName">RED</div>
-          <div class="draft-label">Bans</div>
-          <div class="draft-bans" id="redBans"></div>
-          <div class="draft-label">Picks</div>
-          <div class="draft-picks" id="redPicks"></div>
-        </div>
+        <p class="hint">Ingame overlay potřebuje běžící <b>LeagueBroadcast</b> (localhost:58869) jako zdroj live dat.</p>
+        <div class="overlay-preview"><iframe data-lazy="ingame" title="Ingame overlay"></iframe></div>
       </div>
+    </section>
 
-      <!-- SCOREBOARD -->
-      <div class="sb-header">
-        <div class="sb-team blue">
-          <span class="tag side-blue">BLUE</span>
-          <span class="sb-team-name" id="blueTeamName">—</span>
-        </div>
-        <div class="sb-score">
-          <span class="s-blue" id="blueKills">0</span>
-          <span class="s-dash">–</span>
-          <span class="s-red" id="redKills">0</span>
-        </div>
-        <div class="sb-team red">
-          <span class="sb-team-name" id="redTeamName">—</span>
-          <span class="tag side-red">RED</span>
-        </div>
+    <!-- ============ VODS ============ -->
+    <section class="tabview" data-view="vods">
+      <div class="soon">
+        <div class="empty-flame">🎬</div>
+        <h2>VODs — již brzy</h2>
+        <p>Automatické stříhání záznamu streamu podle rozpoznaných her (Fáze 4).<br>
+           Agent zná časy her z live dat, takže půjde přes OBS WebSocket rozdělit
+           nahrávku na jednotlivé zápasy — později i auto-thumbnaily a upload na YouTube.</p>
       </div>
-
-      <div class="scoreboards">
-        <div class="team-block accent-blue">
-          <table class="sb">
-            <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>KDA</th><th>CS</th><th>Vis</th><th>P</th></tr></thead>
-            <tbody id="blueRows"></tbody>
-          </table>
-        </div>
-        <div class="team-block accent-red">
-          <table class="sb">
-            <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>KDA</th><th>CS</th><th>Vis</th><th>P</th></tr></thead>
-            <tbody id="redRows"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="export-bar">
-        <div class="winner-pick">
-          <span class="field-label">Winner</span>
-          <div id="winnerSeg" class="seg"></div>
-        </div>
-        <div class="export-actions">
-          <button id="endBtn" class="btn">Ukončit hru ručně</button>
-          <button id="exportBtn" class="btn btn-primary">EXPORT .TXT</button>
-          <button id="dbBtn" class="btn btn-disabled" disabled title="Fáze 2">Send to database — Coming later</button>
-        </div>
-      </div>
-      <p class="hint" id="exportHint"></p>
     </section>
   </main>
 

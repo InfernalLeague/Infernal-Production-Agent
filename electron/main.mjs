@@ -11,6 +11,7 @@
 import { app, BrowserWindow, shell } from "electron";
 import electronUpdater from "electron-updater";
 import http from "node:http";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -53,11 +54,14 @@ function waitForServer(timeoutMs = 10000) {
 }
 
 function createWindow() {
+  // V dev režimu ikona okna/taskbaru z build/icon.ico; v .exe ji řeší binárka.
+  const iconPath = path.join(AGENT_ROOT, "build", "icon.ico");
   const win = new BrowserWindow({
     width: 1360,
     height: 900,
     title: "Infernal Production Agent",
     backgroundColor: "#0f0f14",
+    ...(fs.existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: { contextIsolation: true },
   });
   win.removeMenu();
