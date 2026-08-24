@@ -1,14 +1,14 @@
-// Electron shell Infernal Production Agenta (Fáze 0).
+// Electron shell Infernal Production Agenta.
 //
 // Úkol main procesu:
 //   1) nasměrovat zapisovatelná data do userData (v .exe se vedle binárky psát nesmí),
 //   2) nabootovat zkompilovaný backend (dist/index.js) – NE tsx,
-//   3) otevřít okno s dashboardem a servírovat overlaye z /overlay/*.
+//   3) otevřít okno s dashboardem a servírovat overlaye z /overlay/*,
+//   4) auto-update z GitHub Releases + most (IPC) do dashboardu (verze, update okno).
 //
-// Balení do distribuovatelné .exe (electron-builder + electron-updater) je Fáze 1.
 // Viz docs/ROADMAP.md.
 
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, shell, ipcMain } from "electron";
 import electronUpdater from "electron-updater";
 import http from "node:http";
 import fs from "node:fs";
@@ -22,11 +22,14 @@ const AGENT_ROOT = path.resolve(__dirname, "..");
 const PORT = Number(process.env.PORT ?? 4700);
 const DASHBOARD_URL = `http://localhost:${PORT}/`;
 
+let mainWindow = null;
+// Poslední stav updatu; drží se, aby ho šlo poslat i po (re)connectu rendereru.
+let updateStatus = { state: "none" };
+
 // --- Konfigurace cest PŘED importem backendu (config.ts je čte z env) ----------
-// Zapisovatelná data vždy do userData (funguje v dev i v zabalené .exe).
 process.env.INFERNAL_DATA_DIR = app.getPath("userData");
-// Read-only assety (public dashboard + overlays): v .exe z resources, v dev z repa.
 process.env.INFERNAL_ASSETS_DIR = app.isPackaged ? process.resourcesPath : AGENT_ROOT;
+process.env.INFERNAL_VERSION = app.getVersion();
 process.env.PORT = String(PORT);
 
 /** Nabootuje backend v tomto procesu (spustí Express + collectory). */
@@ -54,25 +57,45 @@ function waitForServer(timeoutMs = 10000) {
 }
 
 function createWindow() {
-  // V dev režimu ikona okna/taskbaru z build/icon.ico; v .exe ji řeší binárka.
   const iconPath = path.join(AGENT_ROOT, "build", "icon.ico");
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
     title: "Infernal Production Agent",
     backgroundColor: "#0f0f14",
     ...(fs.existsSync(iconPath) ? { icon: iconPath } : {}),
-    webPreferences: { contextIsolation: true },
+    webPreferences: {
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.cjs"),
+    },
   });
-  win.removeMenu();
-  win.loadURL(DASHBOARD_URL);
-  // Externí odkazy otevírat v systémovém prohlížeči, ne v okně appky.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.removeMenu();
+  mainWindow.loadURL(DASHBOARD_URL);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
-  return win;
+  return mainWindow;
 }
+
+/** Pošle aktuální stav updatu do rendereru (dashboardu). */
+function sendUpdate(status) {
+  updateStatus = status;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("update:status", status);
+  }
+}
+
+// --- IPC most do dashboardu -------------------------------------------------
+ipcMain.handle("app:getVersion", () => app.getVersion());
+ipcMain.on("update:request", (e) => e.sender.send("update:status", updateStatus));
+ipcMain.on("update:install", () => {
+  try {
+    autoUpdater.quitAndInstall();
+  } catch (err) {
+    console.error("[updater] quitAndInstall selhal:", err?.message ?? err);
+  }
+});
 
 app.whenReady().then(async () => {
   try {
@@ -90,23 +113,42 @@ app.whenReady().then(async () => {
 });
 
 /**
- * Auto-update z GitHub Releases (electron-updater). Běží jen v zabalené appce
- * (dev nemá co updatovat). Stáhne na pozadí a nainstaluje při příštím quitu;
- * uživatel nic nemusí řešit. Chyby (offline, špatný feed) jen zalogujeme.
- * Feed = electron-builder.yml → publish. Viz docs/ROADMAP.md, Fáze 1.
+ * Auto-update z GitHub Releases (electron-updater). Běží jen v zabalené appce.
+ * Novou verzi stáhne na pozadí; dashboard přes IPC ukáže okno s číslem verze
+ * a poznámkami. Po stažení nabídne "Restartovat a nainstalovat".
+ * Feed = electron-builder.yml → publish.
  */
 function checkForUpdates() {
   if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
   autoUpdater.logger = { info: console.log, warn: console.warn, error: console.error, debug: () => {} };
-  autoUpdater.on("error", (err) => console.error("[updater]", err?.message ?? err));
-  autoUpdater.on("update-available", (i) => console.log("[updater] nová verze:", i?.version));
-  autoUpdater.on("update-downloaded", (i) => console.log("[updater] staženo, nainstaluje se při quitu:", i?.version));
-  autoUpdater.checkForUpdatesAndNotify().catch((err) =>
-    console.error("[updater] check selhal:", err?.message ?? err),
+
+  autoUpdater.on("update-available", (i) =>
+    sendUpdate({ state: "available", version: i?.version ?? "", notes: normalizeNotes(i?.releaseNotes) }),
   );
+  autoUpdater.on("update-downloaded", (i) =>
+    sendUpdate({ state: "downloaded", version: i?.version ?? "", notes: normalizeNotes(i?.releaseNotes) }),
+  );
+  autoUpdater.on("update-not-available", () => sendUpdate({ state: "none" }));
+  autoUpdater.on("error", (err) => {
+    console.error("[updater]", err?.message ?? err);
+    sendUpdate({ state: "error", message: String(err?.message ?? err) });
+  });
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error("[updater] check selhal:", err?.message ?? err);
+    sendUpdate({ state: "error", message: String(err?.message ?? err) });
+  });
+}
+
+/** releaseNotes může být string nebo pole {version, note}; sjednotíme na text. */
+function normalizeNotes(notes) {
+  if (!notes) return "";
+  if (typeof notes === "string") return notes;
+  if (Array.isArray(notes)) return notes.map((n) => n?.note ?? "").join("\n\n");
+  return "";
 }
 
 app.on("window-all-closed", () => {
-  // Na Windows/Linux zavření okna = konec appky (backend jede v témže procesu).
   if (process.platform !== "darwin") app.quit();
 });

@@ -83,6 +83,7 @@ $("exportBtn").onclick = async () => {
     hint.textContent = data.filePath || "";
     hint.classList.add("ok");
     toast(`✓ Exportováno: ${data.filename}`, "ok");
+    refreshGames();
   } else {
     hint.textContent = data.error || "Export selhal.";
     hint.classList.add("err");
@@ -109,6 +110,7 @@ function statusValue(el, text, cls) {
 function render(s) {
   state = s;
   $("mockBadge").hidden = !s.mock;
+  renderDashRunning(s);
 
   statusValue($("stClient"), s.leagueClient ? "CONNECTED" : "NOT RUNNING", s.leagueClient ? "ok" : "bad");
   statusValue($("stGame"), s.leagueGame ? "RUNNING" : "NOT RUNNING", s.leagueGame ? "ok" : "bad");
@@ -289,6 +291,7 @@ function switchTab(tab) {
   document.querySelectorAll(".nav-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".tabview").forEach((v) => v.classList.toggle("active", v.dataset.view === tab));
   if (tab === "overlays") loadOverlay(activeSub()); // načti iframe až při zobrazení
+  if (tab === "dashboard") refreshGames();
 }
 
 function switchSub(sub) {
@@ -309,6 +312,128 @@ document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () =>
   catch { toast("Kopírování selhalo", "err"); }
 }));
 document.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => window.open($(b.dataset.open).textContent, "_blank")));
+
+// --- produkce (Twitch / Kick) + theme --------------------------------------
+const PRODUCTIONS = {
+  twitch: { label: "Produkce 1 · Twitch", short: "Produkce 1", production: "Produkce 1" },
+  kick: { label: "Produkce 2 · Kick", short: "Produkce 2", production: "Produkce 2" },
+};
+let production = localStorage.getItem("il_production");
+
+function applyProduction(p) {
+  if (!PRODUCTIONS[p]) return;
+  production = p;
+  localStorage.setItem("il_production", p);
+  document.body.dataset.prod = p;
+  $("prodSwitch").textContent = PRODUCTIONS[p].label;
+  // předvyplní pole Production v New Game
+  const prodInput = $("production");
+  if (prodInput && (!prodInput.value || prodInput.value === "Produkce 1" || prodInput.value === "Produkce 2")) {
+    prodInput.value = PRODUCTIONS[p].production;
+  }
+}
+
+function openProdModal() { $("prodModal").hidden = false; }
+function closeProdModal() { $("prodModal").hidden = true; }
+
+document.querySelectorAll(".prod-choice").forEach((b) => (b.onclick = () => {
+  applyProduction(b.dataset.prod);
+  closeProdModal();
+  toast(`Produkce: ${PRODUCTIONS[b.dataset.prod].short}`, "ok");
+}));
+$("prodSwitch").onclick = openProdModal;
+$("prodModal").addEventListener("click", (e) => { if (e.target.id === "prodModal" && production) closeProdModal(); });
+
+// při startu: aplikuj uložený theme (aby UI nebylo bez barvy) a vždy ukaž výběr
+if (production) applyProduction(production);
+else $("prodSwitch").textContent = "Vybrat produkci";
+openProdModal();
+
+// --- verze aplikace (roh) ---------------------------------------------------
+fetch("/api/meta").then((r) => r.json()).then((m) => {
+  const el = $("versionBadge");
+  el.textContent = `v${m.version}`;
+  el.hidden = false;
+}).catch(() => {});
+
+// --- auto-update okno (přes Electron preload) -------------------------------
+$("updLater").onclick = () => { $("updateModal").hidden = true; };
+$("updInstall").onclick = () => { if (window.electronAPI) window.electronAPI.installUpdate(); };
+
+if (window.electronAPI && window.electronAPI.onUpdate) {
+  window.electronAPI.onUpdate((u) => {
+    const modal = $("updateModal"), title = $("updTitle"), body = $("updBody");
+    const notes = $("updNotes"), install = $("updInstall");
+    if (!u || u.state === "none" || u.state === "error") { modal.hidden = true; return; }
+    modal.hidden = false;
+    notes.hidden = !u.notes;
+    notes.textContent = u.notes || "";
+    if (u.state === "available") {
+      title.textContent = `Stahuje se verze ${u.version}`;
+      body.textContent = "Nová verze se stahuje na pozadí. Až bude připravená, můžeš appku restartovat.";
+      install.disabled = true;
+    } else if (u.state === "downloaded") {
+      title.textContent = `Verze ${u.version} je připravená`;
+      body.textContent = "Aktualizace je stažená. Restartuj aplikaci pro dokončení instalace.";
+      install.disabled = false;
+    }
+  });
+}
+
+// --- Dashboard --------------------------------------------------------------
+function renderDashRunning(s) {
+  const el = $("dashRunningBody");
+  if (!el) return;
+  const sess = s && s.session;
+  const live = sess && (sess.meta.status === "LIVE" || sess.meta.status === "WAITING_FOR_GAME");
+  if (!sess || !live) {
+    el.innerHTML = '<span class="dash-none">Žádná hra právě neběží.</span>';
+    return;
+  }
+  const m = sess.meta;
+  const dur = sess.live ? sess.live.durationSeconds : 0;
+  const phase = m.status === "LIVE" ? "LIVE" : "WAITING";
+  el.innerHTML =
+    `<div class="dash-run-match">${esc(m.team1)} <span class="vs">vs</span> ${esc(m.team2)}</div>` +
+    `<div class="dash-run-meta"><span class="badge ${m.status === "LIVE" ? "live" : "waiting"}">${phase}</span>` +
+    `<span>Game ${m.gameNumber} · ${esc(m.seriesFormat)}</span>` +
+    (m.status === "LIVE" ? `<span class="clock live">${fmtClock(dur)}</span>` : "") + `</div>`;
+}
+
+const todayISO = new Date().toISOString().slice(0, 10);
+
+async function refreshGames() {
+  try {
+    const games = await fetch("/api/games").then((r) => r.json());
+    const today = games.filter((g) => g.date === todayISO);
+    const played = today.filter((g) => g.ended);
+    fillDashList("dashPlayed", played.map((g) => ({
+      title: g.title,
+      sub: (g.gameNumber ? `Game ${g.gameNumber}` : "") + (g.winner ? ` · 🏆 ${g.winner}` : (g.exported ? "" : " · neexportováno")),
+      cls: g.exported ? "ok" : "",
+    })), "Zatím žádná dohraná hra dnes.");
+  } catch {
+    fillDashList("dashPlayed", [], "Seznam se nepodařilo načíst.");
+  }
+}
+
+function fillDashList(id, items, emptyText) {
+  const el = $(id);
+  if (!el) return;
+  if (!items.length) { el.innerHTML = `<span class="dash-none">${esc(emptyText)}</span>`; return; }
+  el.innerHTML = items.map((it) =>
+    `<div class="dash-item ${it.cls || ""}"><span class="dash-item-t">${esc(it.title)}</span>` +
+    (it.sub ? `<span class="dash-item-s">${esc(it.sub)}</span>` : "") + `</div>`,
+  ).join("");
+}
+
+// datum + placeholdery pro web-napojení
+$("dashDate").textContent = new Date().toLocaleDateString("cs-CZ", {
+  weekday: "long", day: "numeric", month: "long", year: "numeric",
+});
+fillDashList("dashScheduled", [], "Rozpis se načte z webu (přijde později).");
+fillDashList("dashUpcoming", [], "Zatím nic — napojí se na rozpis z webu.");
+refreshGames();
 
 connectWs();
 initDdragon().then(() => { if (state) render(state); }).catch(() => { /* offline → monogramy */ });

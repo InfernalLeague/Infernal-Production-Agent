@@ -27,6 +27,12 @@ export function startServer(manager: GameManager): void {
 
   app.get("/api/state", (_req, res) => res.json(manager.getState()));
 
+  // Meta o aplikaci (verze pro roh dashboardu, mock flag).
+  app.get("/api/meta", (_req, res) => res.json({ version: config.version, mock: config.mock }));
+
+  // Seznam her ze složky games/ (pro Dashboard: dohrané/čekající).
+  app.get("/api/games", (_req, res) => res.json(listGames()));
+
   app.post("/api/game", (req, res) => {
     try {
       const b = req.body as Partial<CreateGameInput>;
@@ -85,6 +91,57 @@ export function startServer(manager: GameManager): void {
     log.info(`Dashboard běží na  http://localhost:${config.port}`);
     if (config.mock) log.info("MOCK režim aktivní – simuluji hru Ixtal vs Freljord.");
   });
+}
+
+/**
+ * Načte hry ze složky games/ pro Dashboard. Preferuje confirmed.json (spolehlivé
+ * názvy týmů + winner); jinak parsuje název složky a hlídá live_final/export.
+ */
+interface GameListItem {
+  folder: string;
+  date: string;
+  title: string;
+  gameNumber: number | null;
+  winner: string | null;
+  exported: boolean;
+  ended: boolean;
+}
+
+function listGames(): GameListItem[] {
+  const dir = config.paths.games;
+  if (!fs.existsSync(dir)) return [];
+  const out: GameListItem[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    const folder = path.join(dir, name);
+    try {
+      if (!fs.statSync(folder).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const date = /^\d{4}-\d{2}-\d{2}/.test(name) ? name.slice(0, 10) : "";
+    const exported = fs.existsSync(path.join(folder, "export.txt"));
+    const ended = exported || fs.existsSync(path.join(folder, "live_final.json"));
+    let title = name;
+    let gameNumber: number | null = null;
+    let winner: string | null = null;
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(folder, "confirmed.json"), "utf8"));
+      title = `${c.game.team1} vs ${c.game.team2}`;
+      gameNumber = c.game.gameNumber ?? null;
+      winner = c.game.winner ?? null;
+    } catch {
+      // fallback: název složky "YYYY-MM-DD_Team1_Team2_G<n>"
+      const m = name.match(/^\d{4}-\d{2}-\d{2}_(.+)_G(\d+)$/);
+      if (m) {
+        title = m[1].replace(/_/g, " ");
+        gameNumber = Number(m[2]);
+      }
+    }
+    out.push({ folder: name, date, title, gameNumber, winner, exported, ended });
+  }
+  // nejnovější první (podle názvu složky = datum + pořadí)
+  out.sort((a, b) => b.folder.localeCompare(a.folder));
+  return out;
 }
 
 /**

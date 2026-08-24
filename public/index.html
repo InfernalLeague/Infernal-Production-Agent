@@ -18,6 +18,7 @@
       <span id="mockBadge" class="badge badge-mock" hidden>MOCK</span>
     </div>
     <div class="topbar-right">
+      <button id="prodSwitch" class="prod-pill" title="Změnit produkci">—</button>
       <span class="phase">Fáze 1A · Live → TXT</span>
       <button id="openNewGame" class="btn btn-ghost btn-sm">+ New Game</button>
     </div>
@@ -25,15 +26,51 @@
 
   <!-- Hlavní navigace -->
   <nav class="mainnav">
-    <button class="nav-tab active" data-tab="collection">Data Collection</button>
+    <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+    <button class="nav-tab" data-tab="collection">Data Collection</button>
     <button class="nav-tab" data-tab="overlays">Overlays</button>
     <button class="nav-tab" data-tab="vods">VODs</button>
   </nav>
 
   <main>
+    <!-- ============ DASHBOARD (landing) ============ -->
+    <section class="tabview active" data-view="dashboard">
+      <div class="dash-head">
+        <div>
+          <div class="dash-kicker">Vítej zpět</div>
+          <h1 class="dash-title">Dashboard</h1>
+        </div>
+        <div class="dash-date" id="dashDate">—</div>
+      </div>
+
+      <!-- Právě běží -->
+      <div class="dash-running" id="dashRunning">
+        <div class="dash-card-h"><span class="live-ping"></span> Právě běží</div>
+        <div id="dashRunningBody" class="dash-running-body">
+          <span class="dash-none">Žádná hra právě neběží.</span>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="dash-card">
+          <div class="dash-card-h">Dnešní program</div>
+          <div id="dashScheduled" class="dash-list"></div>
+          <p class="hint dash-soon">Automatické načítání rozpisu z webu přijde později.</p>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-h">Čeká nás</div>
+          <div id="dashUpcoming" class="dash-list"></div>
+          <p class="hint dash-soon">Naplní se z rozpisu, až bude napojený web.</p>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-h">Dohrané dnes</div>
+          <div id="dashPlayed" class="dash-list"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ DATA COLLECTION ============ -->
-    <section class="tabview active" data-view="collection">
-      <!-- Stavové řádky (workflow §4) -->
+    <section class="tabview" data-view="collection">
       <div class="status-grid">
         <div class="status-cell">
           <span class="status-label">League Client</span>
@@ -53,7 +90,6 @@
         </div>
       </div>
 
-      <!-- EMPTY STATE (žádná hra) -->
       <section id="emptyState" class="empty" hidden>
         <div class="empty-flame">🔥</div>
         <h2>Žádná aktivní hra</h2>
@@ -61,7 +97,6 @@
         <button id="emptyCreate" class="btn btn-primary">CREATE GAME</button>
       </section>
 
-      <!-- LIVE / GAME PANEL -->
       <section id="gamePanel" class="panel" hidden>
         <div class="game-head">
           <div>
@@ -75,7 +110,6 @@
           </div>
         </div>
 
-        <!-- DRAFT (champ select z LCU) -->
         <div id="draftPanel" class="draft" hidden>
           <div class="draft-col">
             <div class="draft-side side-blue" id="draftBlueName">BLUE</div>
@@ -93,7 +127,6 @@
           </div>
         </div>
 
-        <!-- SCOREBOARD -->
         <div class="sb-header">
           <div class="sb-team blue">
             <span class="tag side-blue">BLUE</span>
@@ -182,8 +215,9 @@
   </main>
 
   <footer class="foot">Live data se čte lokálně z League (127.0.0.1:2999). Export je pouze <code>.txt</code>.</footer>
+  <div class="version-badge" id="versionBadge" hidden></div>
 
-  <!-- NEW GAME MODAL (workflow §5) -->
+  <!-- NEW GAME MODAL -->
   <div id="newGameModal" class="modal" hidden>
     <div class="modal-card">
       <div class="modal-head">
@@ -210,6 +244,39 @@
       <div class="modal-actions">
         <p class="hint" id="createHint"></p>
         <button id="createBtn" class="btn btn-primary">CREATE GAME</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRODUCTION SELECT MODAL -->
+  <div id="prodModal" class="modal" hidden>
+    <div class="modal-card prod-modal">
+      <div class="modal-head"><h2>Výběr produkce</h2></div>
+      <p class="hint">Vyber produkci pro dnešní vysílání — podle ní se přebarví rozhraní.</p>
+      <div class="prod-choices">
+        <button class="prod-choice" data-prod="twitch">
+          <span class="prod-swatch twitch"></span>
+          <span class="prod-name">Produkce 1</span>
+          <span class="prod-plat">Twitch</span>
+        </button>
+        <button class="prod-choice" data-prod="kick">
+          <span class="prod-swatch kick"></span>
+          <span class="prod-name">Produkce 2</span>
+          <span class="prod-plat">Kick</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPDATE MODAL -->
+  <div id="updateModal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h2 id="updTitle">Nová verze</h2></div>
+      <p id="updBody" class="upd-body"></p>
+      <div id="updNotes" class="upd-notes" hidden></div>
+      <div class="modal-actions">
+        <button id="updLater" class="btn btn-ghost">Později</button>
+        <button id="updInstall" class="btn btn-primary" disabled>Restartovat a nainstalovat</button>
       </div>
     </div>
   </div>

@@ -278,3 +278,82 @@ table.sb { width: 100%; border-collapse: collapse; font-size: 13px; }
 .soon { text-align: center; padding: 70px 20px; border: 1px dashed var(--border2); border-radius: var(--radius); background: var(--panel); }
 .soon h2 { font-family: var(--disp); font-size: 18px; letter-spacing: 1px; margin: 6px 0; }
 .soon p { color: var(--muted); margin: 0; line-height: 1.7; }
+
+/* ================= produkce: theme (Twitch fialová / Kick zelená) ========= */
+body[data-prod="twitch"] { --flame: #9146ff; --flame2: #a970ff; }
+body[data-prod="twitch"] .btn-primary { color: #fff; }
+body[data-prod="twitch"] .brand-logo { filter: drop-shadow(0 0 8px rgba(145,70,255,.55)); }
+body[data-prod="kick"]   { --flame: #53fc18; --flame2: #7dff54; }
+body[data-prod="kick"] .brand-logo { filter: drop-shadow(0 0 8px rgba(83,252,24,.5)); }
+
+/* produkční pill v topbaru */
+.prod-pill {
+  background: var(--panel2); border: 1px solid var(--flame); color: var(--text);
+  border-radius: 999px; padding: 5px 13px; cursor: pointer;
+  font-family: var(--disp); font-size: 12px; font-weight: 600; letter-spacing: .5px;
+  box-shadow: 0 0 12px -4px var(--flame); transition: filter .15s;
+}
+.prod-pill:hover { filter: brightness(1.12); }
+
+/* ================= verze v rohu ========================================== */
+.version-badge {
+  position: fixed; right: 12px; bottom: 10px; z-index: 5;
+  color: var(--faint); font-size: 11px; font-family: var(--disp); letter-spacing: 1px;
+  background: rgba(13,15,20,.6); border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 8px; pointer-events: none; user-select: none;
+}
+
+/* ================= Dashboard ============================================= */
+.dash-head { display: flex; justify-content: space-between; align-items: flex-end; }
+.dash-kicker { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; font-family: var(--disp); }
+.dash-title { font-family: var(--disp); font-size: 26px; letter-spacing: 1px; margin: 2px 0 0; }
+.dash-date { color: var(--muted); font-size: 13px; text-transform: capitalize; }
+
+.dash-running {
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  border: 1px solid var(--flame); border-radius: var(--radius); padding: 16px 18px;
+  box-shadow: 0 0 22px -10px var(--flame);
+}
+.dash-running-body { margin-top: 8px; }
+.dash-run-match { font-family: var(--disp); font-size: 20px; font-weight: 700; }
+.dash-run-match .vs { color: var(--muted); font-weight: 500; margin: 0 6px; }
+.dash-run-meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.live-ping { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.4s ease-in-out infinite; margin-right: 4px; }
+
+.dash-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.dash-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.dash-card-h { font-family: var(--disp); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--text); display: flex; align-items: center; margin-bottom: 12px; }
+.dash-list { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.dash-item { display: flex; flex-direction: column; gap: 2px; background: var(--panel2); border: 1px solid var(--border); border-left: 3px solid var(--border2); border-radius: 8px; padding: 8px 11px; }
+.dash-item.ok { border-left-color: var(--green); }
+.dash-item-t { font-weight: 600; font-size: 14px; }
+.dash-item-s { color: var(--muted); font-size: 12px; }
+.dash-none { color: var(--faint); font-size: 13px; font-style: italic; }
+.dash-soon { margin-top: 10px; margin-bottom: 0; }
+
+/* ================= produkční modal ====================================== */
+.prod-modal { max-width: 460px; }
+.prod-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.prod-choice {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: var(--panel2); border: 1px solid var(--border2); border-radius: var(--radius);
+  padding: 20px 12px; cursor: pointer; transition: border-color .15s, transform .05s, background .15s;
+}
+.prod-choice:hover { background: var(--panel3); transform: translateY(-2px); }
+.prod-choice[data-prod="twitch"]:hover { border-color: #9146ff; box-shadow: 0 0 18px -6px #9146ff; }
+.prod-choice[data-prod="kick"]:hover { border-color: #53fc18; box-shadow: 0 0 18px -6px #53fc18; }
+.prod-swatch { width: 44px; height: 44px; border-radius: 12px; }
+.prod-swatch.twitch { background: #9146ff; box-shadow: 0 0 16px -3px #9146ff; }
+.prod-swatch.kick { background: #53fc18; box-shadow: 0 0 16px -3px #53fc18; }
+.prod-name { font-family: var(--disp); font-weight: 700; font-size: 15px; }
+.prod-plat { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* ================= update modal ========================================= */
+#updateModal { z-index: 60; } /* nad ostatní modaly (produkce) */
+.upd-body { color: var(--muted); margin: 4px 0 0; }
+.upd-notes { margin-top: 12px; padding: 12px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; white-space: pre-wrap; max-height: 220px; overflow-y: auto; color: var(--text); }
+
+@media (max-width: 900px) {
+  .dash-grid { grid-template-columns: 1fr; }
+  .prod-choices { grid-template-columns: 1fr; }
+}

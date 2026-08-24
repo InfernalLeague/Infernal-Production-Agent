@@ -1,9 +1,23 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Kořen projektu (o úroveň výš než /src, resp. /dist). */
 export const ROOT = path.resolve(__dirname, "..");
+
+/**
+ * Verze aplikace. V Electronu ji main proces předá přes INFERNAL_VERSION
+ * (app.getVersion()), v dev režimu se čte z package.json.
+ */
+function readVersion(): string {
+  if (process.env.INFERNAL_VERSION) return process.env.INFERNAL_VERSION;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version ?? "dev";
+  } catch {
+    return "dev";
+  }
+}
 
 /**
  * Base adresář pro ZAPISOVATELNÁ data (data/games/logs).
@@ -27,6 +41,9 @@ const ASSETS_ROOT = process.env.INFERNAL_ASSETS_DIR
   : ROOT;
 
 export const config = {
+  /** Verze aplikace (zobrazená v rohu dashboardu, /api/meta). */
+  version: readVersion(),
+
   /** Port lokálního dashboardu (a hostingu overlayů). */
   port: Number(process.env.PORT ?? 4700),
 
