@@ -21,6 +21,23 @@ if (!(globalThis as { WebSocket?: unknown }).WebSocket) {
   (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
 }
 
+// WebSocketManager v league-broadcast-client@1.12.0 plánuje reconnect přes
+// `window.setTimeout`. Electron main process ale žádný browserový `window`
+// nemá, takže při nedostupném LeagueBroadcastu padal celý Agent. Poskytneme
+// pouze časovače, které klient skutečně potřebuje; žádné DOM API nesimulujeme.
+const runtime = globalThis as unknown as {
+  window?: {
+    setTimeout: typeof setTimeout;
+    clearTimeout: typeof clearTimeout;
+  };
+};
+if (!runtime.window) {
+  runtime.window = {
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
+  };
+}
+
 export interface LeagueBroadcastStatus {
   enabled: boolean;
   connected: boolean;
