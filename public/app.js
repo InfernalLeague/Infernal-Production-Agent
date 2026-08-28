@@ -23,6 +23,9 @@ function champIcon(displayName) {
   const id = champIdByName[norm(displayName)];
   return id ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${id}.png` : null;
 }
+function itemIcon(itemId) {
+  return ddVersion && itemId ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png` : null;
+}
 
 // --- WebSocket: živý stav ---------------------------------------------------
 function connectWs() {
@@ -121,6 +124,18 @@ function render(s) {
   else if (s.liveApiReachable) statusValue($("stApi"), "RESPONDING", "ok");
   else statusValue($("stApi"), sess ? "WAITING" : "—", sess ? "warn" : "bad");
 
+  const broadcast = s.leagueBroadcast || {};
+  if (!broadcast.enabled) statusValue($("stBroadcast"), s.mock ? "MOCK DISABLED" : "DISABLED", "bad");
+  else if (broadcast.connected) statusValue($("stBroadcast"), broadcast.gameState || "CONNECTED", broadcast.gameState === "Running" ? "live" : "ok");
+  else statusValue($("stBroadcast"), "RECONNECTING", "warn");
+
+  const delivery = s.liveDelivery || { mode: "local-only", pending: 0 };
+  if (delivery.mode === "remote") {
+    statusValue($("stDelivery"), delivery.pending ? `OUTBOX ${delivery.pending}` : "REMOTE READY", delivery.pending ? "warn" : "ok");
+  } else {
+    statusValue($("stDelivery"), "LOCAL TEST", "ok");
+  }
+
   if (!sess) {
     statusValue($("stCurrent"), "NONE", "bad");
     $("gamePanel").hidden = true;
@@ -137,6 +152,16 @@ function render(s) {
   $("mTeam2").textContent = m.team2;
   $("mGame").textContent = `Game ${m.gameNumber} · ${m.seriesFormat}`;
   $("mId").textContent = m.localGameId;
+
+  const source = $("dataSourceBadge");
+  const broadcastFresh = broadcast.connected && broadcast.lastSnapshotAt && Date.now() - broadcast.lastSnapshotAt < 3000;
+  source.className = "source-pill " + (broadcastFresh ? "primary" : "fallback");
+  source.textContent = broadcastFresh ? "WEBSOCKET · LEAGUEBROADCAST" : (s.mock ? "MOCK DATA" : "FALLBACK · RIOT LIVE API");
+  const deliveryNote = $("deliveryNote");
+  deliveryNote.className = "delivery-note " + (delivery.mode === "remote" ? "remote" : "");
+  deliveryNote.textContent = delivery.mode === "remote"
+    ? `Database stream aktivní${delivery.pending ? ` · ${delivery.pending} čeká` : ""}`
+    : "Live stream: local test log";
 
   // fáze badge
   const badge = $("phaseBadge");
@@ -161,8 +186,11 @@ function render(s) {
   clock.classList.toggle("live", m.status === "LIVE");
   const players = live ? live.players : (sess.finalSnapshot ? sess.finalSnapshot.players : []);
   const kills = live ? live.teamKills : (sess.finalSnapshot ? sess.finalSnapshot.teamKills : { BLUE: 0, RED: 0 });
+  const gold = live ? live.teamGold : (sess.finalSnapshot ? sess.finalSnapshot.teamGold : { BLUE: null, RED: null });
   $("blueKills").textContent = kills.BLUE;
   $("redKills").textContent = kills.RED;
+  $("blueGold").textContent = gold && gold.BLUE != null ? `${fmtGold(gold.BLUE)} gold` : "— gold";
+  $("redGold").textContent = gold && gold.RED != null ? `${fmtGold(gold.RED)} gold` : "— gold";
 
   // first blood (jméno + strana), jakmile padne první krev
   const fb = live ? live.firstBlood : (sess.finalSnapshot ? sess.finalSnapshot.firstBlood : null);
@@ -247,16 +275,16 @@ function renderRows(tbodyId, players) {
     const icon = champIcon(p.championName);
     const letter = esc((p.championName || "?")[0]);
     const ava = `<span class="ava" data-l="${letter}">${icon ? `<img src="${icon}" alt="" loading="lazy" onerror="this.remove()">` : ""}</span>`;
-    const ratio = kdaRatio(p.kills, p.deaths, p.assists);
-    const penta = p.pentakills > 0
-      ? `<span class="penta">${p.pentakills}★</span>`
-      : `<span class="none">–</span>`;
+    const items = (p.items || []).slice(0, 7).map((id) => {
+      const src = itemIcon(id);
+      return src ? `<img class="item-mini" src="${src}" alt="Item ${id}" title="Item ${id}" loading="lazy">` : "";
+    }).join("");
     tr.innerHTML =
       `<td class="p-cell"><div class="p-wrap">${ava}<span class="p-id"><span class="p-name">${esc(p.name)}</span><span class="p-champ">${esc(p.championName)}</span></span></div></td>` +
       `<td class="c-lvl">${p.level}</td>` +
       `<td class="c-kda"><b>${p.kills}</b><span class="sep">/</span><span class="d">${p.deaths}</span><span class="sep">/</span><b>${p.assists}</b></td>` +
-      `<td class="c-ratio ${ratio.cls}">${ratio.text}</td>` +
-      `<td>${p.cs}</td><td>${p.vision}</td><td class="c-p">${penta}</td>`;
+      `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}</td>` +
+      `<td><span class="item-list">${items || "—"}</span></td>`;
     tb.appendChild(tr);
   }
 }
@@ -272,6 +300,7 @@ function fmtClock(sec) {
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+function fmtGold(gold) { return Number(gold).toLocaleString("cs-CZ"); }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 // --- navigace (taby) --------------------------------------------------------
@@ -329,8 +358,8 @@ document.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => windo
 
 // --- produkce (Twitch / Kick) + theme --------------------------------------
 const PRODUCTIONS = {
-  twitch: { label: "Produkce 1 · Twitch", short: "Produkce 1", production: "Produkce 1" },
-  kick: { label: "Produkce 2 · Kick", short: "Produkce 2", production: "Produkce 2" },
+  twitch: { label: "Twitch", short: "Twitch", production: "Twitch" },
+  kick: { label: "Kick", short: "Kick", production: "Kick" },
 };
 let production = localStorage.getItem("il_production");
 
@@ -342,7 +371,7 @@ function applyProduction(p) {
   $("prodSwitch").textContent = PRODUCTIONS[p].label;
   // předvyplní pole Production v New Game
   const prodInput = $("production");
-  if (prodInput && (!prodInput.value || prodInput.value === "Produkce 1" || prodInput.value === "Produkce 2")) {
+  if (prodInput) {
     prodInput.value = PRODUCTIONS[p].production;
   }
 }

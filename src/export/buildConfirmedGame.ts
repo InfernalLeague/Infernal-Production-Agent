@@ -11,9 +11,9 @@ import type {
 /**
  * Sestaví finální `ConfirmedGame` objekt (source of truth) z final live snapshotu.
  *
- * Fáze 1A: máme jen live data → damage / gold / gold_per_minute jsou null
- * (přijdou až ze screenshotu ve Fázi 1B). Vision je live-only (§23).
- * Ostatní statistiky mají zdroj "live". Team gold zatím null (§22).
+ * Damage / gold_per_minute jsou zatím null (přijdou z dalšího zdroje).
+ * Gold je dostupný z LeagueBroadcastu, při Riot API fallbacku zůstává null.
+ * Vision a ostatní dostupné statistiky mají zdroj "live".
  */
 export function buildConfirmedGame(
   meta: GameMeta,
@@ -30,7 +30,7 @@ export function buildConfirmedGame(
     name: teamNameOf(side),
     side,
     kills: snapshot.teamKills[side],
-    gold: null, // až ze screenshotu (§22)
+    gold: snapshot.teamGold[side],
   }));
 
   const players: ConfirmedPlayer[] = snapshot.players.map((p) => ({
@@ -45,7 +45,7 @@ export function buildConfirmedGame(
     cs: p.cs,
     vision: p.vision,
     damage: null,
-    gold: null,
+    gold: p.gold,
     goldPerMinute: null,
     pentakills: p.pentakills,
     items: p.items,
@@ -56,7 +56,7 @@ export function buildConfirmedGame(
       cs: "live",
       vision: "live",
       damage: null,
-      gold: null,
+      gold: p.gold === null ? null : "live",
       goldPerMinute: null,
     },
   }));

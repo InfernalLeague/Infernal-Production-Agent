@@ -1,7 +1,17 @@
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
-import type { AllGameData, CreateGameInput, Draft, FinalLiveSnapshot, GameMeta, Side } from "../types.js";
+import { GameState } from "@bluebottle_gg/league-broadcast-client";
+import type {
+  AllGameData,
+  BroadcastGameEvent,
+  BroadcastGameSnapshot,
+  CreateGameInput,
+  Draft,
+  FinalLiveSnapshot,
+  GameMeta,
+  Side,
+} from "../types.js";
 import { config } from "../config.js";
 import { log } from "../util/logger.js";
 import { ensureDirs, gameFolder, writeJsonAtomic } from "../util/storage.js";
@@ -11,6 +21,8 @@ import { ChampSelectCollector } from "../champselect/ChampSelectCollector.js";
 import { GameSession } from "./GameSession.js";
 import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
 import { exportConfirmedGame, type ExportMethod, type ExportResult } from "../export/exportConfirmedGame.js";
+import { LeagueBroadcastCollector } from "../live/LeagueBroadcastCollector.js";
+import { LiveStreamPublisher } from "../live/LiveStreamPublisher.js";
 
 /**
  * GameManager: orchestrátor Fáze 1A.
@@ -25,21 +37,30 @@ export class GameManager extends EventEmitter {
   private processes = { client: false, game: false };
   private recoveryTimer: NodeJS.Timeout | null = null;
   private processTimer: NodeJS.Timeout | null = null;
+  private broadcastEndTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly collector: LeagueDataCollector,
     private readonly champSelect: ChampSelectCollector,
+    private readonly broadcast: LeagueBroadcastCollector,
+    private readonly publisher: LiveStreamPublisher,
   ) {
     super();
     ensureDirs();
     this.collector.on("data", (d: AllGameData) => this.onData(d));
     this.collector.on("unreachable", () => this.onUnreachable());
     this.champSelect.on("draft", (draft: Draft | null) => this.onDraft(draft));
+    this.broadcast.on("snapshot", (snapshot: BroadcastGameSnapshot) => this.onBroadcastSnapshot(snapshot));
+    this.broadcast.on("gameEvent", (event: BroadcastGameEvent) => this.onBroadcastEvent(event));
+    this.broadcast.on("gameStatus", (status: GameState) => this.onBroadcastGameStatus(status));
+    this.broadcast.on("status", () => this.emitUpdate());
+    this.publisher.on("status", () => this.emitUpdate());
   }
 
   start(): void {
     this.collector.start();
     this.champSelect.start();
+    this.broadcast.start();
     this.recoveryTimer = setInterval(() => this.writeRecovery(), config.recoveryIntervalMs);
     this.processTimer = setInterval(() => void this.refreshProcesses(), 3000);
     void this.refreshProcesses();
@@ -48,12 +69,21 @@ export class GameManager extends EventEmitter {
   // --- vytvoření hry (workflow §5–§7) --------------------------------------
 
   createGame(input: CreateGameInput): GameMeta {
+    if (this.session && this.session.status !== "EXPORTED") {
+      throw new Error("Nejdřív ukonči a exportuj aktuální hru. Nová hra by přepsala rozpracovaná data.");
+    }
+    const team1 = input.team1.trim();
+    const team2 = input.team2.trim();
+    if (!team1 || !team2) throw new Error("Názvy obou týmů jsou povinné.");
+    if (!Number.isInteger(input.gameNumber) || input.gameNumber < 1) {
+      throw new Error("Číslo hry musí být celé číslo větší než nula.");
+    }
     const createdAt = new Date().toISOString();
     const team1Side: Side = input.team1Side ?? "BLUE";
     const meta: GameMeta = {
       localGameId: this.nextLocalGameId(createdAt),
-      team1: input.team1.trim(),
-      team2: input.team2.trim(),
+      team1,
+      team2,
       gameNumber: input.gameNumber,
       seriesFormat: input.seriesFormat,
       production: input.production?.trim() || undefined,
@@ -61,9 +91,10 @@ export class GameManager extends EventEmitter {
       createdAt,
       status: "WAITING_FOR_GAME",
     };
-    const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber);
+    const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber, meta.localGameId);
     fs.mkdirSync(folder, { recursive: true });
     this.session = new GameSession(meta, folder);
+    this.publisher.beginGame(meta, folder);
     log.info(`Nová hra: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`);
     this.emitUpdate();
     return meta;
@@ -71,6 +102,9 @@ export class GameManager extends EventEmitter {
 
   setWinner(name: string | null): void {
     if (!this.session) return;
+    if (name !== null && name !== this.session.meta.team1 && name !== this.session.meta.team2) {
+      throw new Error("Vítěz musí být jeden z týmů aktuální hry.");
+    }
     this.session.setWinner(name);
     this.emitUpdate();
   }
@@ -87,12 +121,64 @@ export class GameManager extends EventEmitter {
   private onData(data: AllGameData): void {
     if (!this.session) return; // data ignorujeme, dokud operátor nezaložil hru
     const s = this.session;
+    if (this.broadcast.isFresh()) return; // WebSocket je primární; Riot API je fallback
     if (s.status === "WAITING_FOR_GAME" || s.status === "CREATED") {
       log.info(`${s.meta.localGameId}: hra začala → LIVE`);
     }
     if (s.status === "WAITING_FOR_GAME" || s.status === "CREATED" || s.status === "LIVE") {
       s.applyLive(data);
+      const snapshot = this.transportSnapshot(s);
+      if (snapshot) this.publisher.publishSnapshot(snapshot, config.mock ? "mock" : "riot-live-api");
       this.emitUpdate();
+    }
+  }
+
+  private onBroadcastSnapshot(snapshot: BroadcastGameSnapshot): void {
+    const s = this.session;
+    if (!s || (s.status !== "CREATED" && s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
+    const wasWaiting = s.status !== "LIVE";
+    s.applyBroadcast(snapshot);
+    if (wasWaiting) log.info(`${s.meta.localGameId}: LeagueBroadcast detekoval hru → LIVE`);
+    this.publisher.publishSnapshot(snapshot, "league-broadcast");
+    this.emitUpdate();
+  }
+
+  private onBroadcastEvent(event: BroadcastGameEvent): void {
+    const s = this.session;
+    if (!s || (s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
+    this.publisher.publishEvent(event);
+
+    if (event.type === "champion.kill" && s.currentLive && !s.currentLive.firstBlood) {
+      const killer = (event.payload.killer ?? null) as { playerName?: string | null } | null;
+      const player = killer?.playerName
+        ? s.currentLive.players.find((candidate) => candidate.name === killer.playerName)
+        : null;
+      if (player) s.currentLive.firstBlood = { playerName: player.name, side: player.side };
+    }
+    this.emitUpdate();
+  }
+
+  private onBroadcastGameStatus(status: GameState): void {
+    if (status === GameState.Running || status === GameState.Paused) {
+      if (this.broadcastEndTimer) clearTimeout(this.broadcastEndTimer);
+      this.broadcastEndTimer = null;
+      return;
+    }
+    if (status === GameState.GameOver && this.session?.status === "LIVE") {
+      this.endCurrentGame("LeagueBroadcast oznámil konec hry");
+      return;
+    }
+    if (status === GameState.OutOfGame && this.session?.status === "LIVE") {
+      // BlueBottle používá OutOfGame i při pouhém odpojení socketu. Krátká
+      // prodleva rozliší skutečný stav serveru (socket zůstane připojený) od
+      // výpadku, při kterém dál rozhoduje 12s Riot fallback.
+      if (this.broadcastEndTimer) clearTimeout(this.broadcastEndTimer);
+      this.broadcastEndTimer = setTimeout(() => {
+        const state = this.broadcast.getStatus();
+        if (state.connected && state.gameState === "OutOfGame" && this.session?.status === "LIVE") {
+          this.endCurrentGame("LeagueBroadcast přešel do OutOfGame");
+        }
+      }, 1500);
     }
   }
 
@@ -153,6 +239,11 @@ export class GameManager extends EventEmitter {
     if (this.session.finalSnapshot) {
       writeJsonAtomic(path.join(this.session.folder, "live_final.json"), this.session.finalSnapshot);
     }
+    this.publisher.finalize(
+      this.session.finalSnapshot?.durationSeconds ?? null,
+      this.currentTransportSource(),
+      this.transportSnapshot(this.session) ?? undefined,
+    );
     this.emitUpdate();
   }
 
@@ -205,6 +296,7 @@ export class GameManager extends EventEmitter {
       durationSeconds: s.currentLive.durationSeconds,
       players: s.currentLive.players,
       teamKills: s.currentLive.teamKills,
+      teamGold: s.currentLive.teamGold,
       firstBlood: s.currentLive.firstBlood,
     };
   }
@@ -219,12 +311,31 @@ export class GameManager extends EventEmitter {
       liveApiReachable: this.collector.reachable,
       lastOkAt: this.collector.lastOkAt,
       champSelectActive: this.champSelect.active,
+      leagueBroadcast: this.broadcast.getStatus(),
+      liveDelivery: this.publisher.getStatus(),
       session: this.session ? this.session.toClient() : null,
     };
   }
 
   private emitUpdate(): void {
     this.emit("update", this.getState());
+  }
+
+  private transportSnapshot(s: GameSession): BroadcastGameSnapshot | null {
+    if (!s.currentLive) return null;
+    return {
+      capturedAt: new Date().toISOString(),
+      gameTime: s.currentLive.durationSeconds,
+      players: s.currentLive.players.map((player) => ({ ...player, items: [...player.items] })),
+      teamKills: { ...s.currentLive.teamKills },
+      teamGold: { ...s.currentLive.teamGold },
+      patch: null,
+    };
+  }
+
+  private currentTransportSource(): "league-broadcast" | "riot-live-api" | "mock" {
+    if (config.mock) return "mock";
+    return this.broadcast.isFresh() ? "league-broadcast" : "riot-live-api";
   }
 
   private nextLocalGameId(dateIso: string): string {

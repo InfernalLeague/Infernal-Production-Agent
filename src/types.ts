@@ -265,6 +265,7 @@ export interface FinalLiveSnapshot {
   durationSeconds: number;
   players: LivePlayerState[];
   teamKills: { BLUE: number; RED: number };
+  teamGold: { BLUE: number | null; RED: number | null };
   firstBlood: FirstBloodInfo | null;
 }
 
@@ -278,7 +279,56 @@ export interface LivePlayerState {
   deaths: number;
   assists: number;
   cs: number;
+  gold: number | null;
   vision: number;
   pentakills: number;
   items: number[];
+}
+
+// ---------------------------------------------------------------------------
+// Průběžný live transport (LeagueBroadcast → outbox → budoucí Supabase ingest)
+// ---------------------------------------------------------------------------
+
+export type LiveTransportSource = "league-broadcast" | "riot-live-api" | "mock";
+export type LiveTransportKind = "lifecycle" | "event" | "snapshot";
+
+/** Stabilní obálka každé zprávy odesílané z Agenta. */
+export interface LiveTransportEnvelope {
+  schemaVersion: 1;
+  eventId: string;
+  localGameId: string;
+  sequence: number;
+  kind: LiveTransportKind;
+  type: string;
+  source: LiveTransportSource;
+  capturedAt: string;
+  gameTime: number | null;
+  payload: unknown;
+}
+
+/** Normalizovaný WebSocket snapshot nezávislý na datových třídách BlueBottle. */
+export interface BroadcastGameSnapshot {
+  capturedAt: string;
+  gameTime: number;
+  players: LivePlayerState[];
+  teamKills: { BLUE: number; RED: number };
+  teamGold: { BLUE: number | null; RED: number | null };
+  patch: string | null;
+}
+
+export interface BroadcastGameEvent {
+  type: "champion.kill" | "player.update" | "objective" | "team.update";
+  capturedAt: string;
+  gameTime: number | null;
+  payload: Record<string, unknown>;
+}
+
+export interface LiveDeliveryStatus {
+  mode: "local-only" | "remote";
+  configured: boolean;
+  pending: number;
+  delivered: number;
+  failed: number;
+  lastDeliveredAt: string | null;
+  lastError: string | null;
 }

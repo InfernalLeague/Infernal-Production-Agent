@@ -62,6 +62,25 @@ export const config = {
   /** Jak často číst live data (workflow §9: cca 1× za sekundu). */
   pollIntervalMs: 1000,
 
+  /** LeagueBroadcast WebSocket – primární rychlý zdroj ingame dat. */
+  leagueBroadcast: {
+    host: process.env.LEAGUE_BROADCAST_HOST ?? "localhost",
+    port: Number(process.env.LEAGUE_BROADCAST_PORT ?? 58869),
+    enabled: process.env.LEAGUE_BROADCAST_ENABLED !== "0",
+  },
+
+  /** Minimální odstup databázových snapshotů; diskrétní eventy se netlumí. */
+  liveSnapshotMinIntervalMs: Number(process.env.LIVE_SNAPSHOT_INTERVAL_MS ?? 500),
+
+  /**
+   * Budoucí Supabase Edge Function / ingest endpoint. Bez URL běží local-only
+   * režim a kontrakt se zapisuje do složky hry pro bezpečné testování.
+   */
+  liveIngest: {
+    url: process.env.INFERNAL_INGEST_URL?.trim() || null,
+    token: process.env.INFERNAL_INGEST_TOKEN?.trim() || null,
+  },
+
   /** Jak často ukládat recovery snapshot (workflow §13: 5–10 s). */
   recoveryIntervalMs: 5000,
 

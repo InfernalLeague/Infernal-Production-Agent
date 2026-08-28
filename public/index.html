@@ -87,6 +87,14 @@
           <span class="status-value"><i class="dot"></i><b id="stApi">—</b></span>
         </div>
         <div class="status-cell">
+          <span class="status-label">LeagueBroadcast</span>
+          <span class="status-value"><i class="dot"></i><b id="stBroadcast">—</b></span>
+        </div>
+        <div class="status-cell">
+          <span class="status-label">Live Data Output</span>
+          <span class="status-value"><i class="dot"></i><b id="stDelivery">LOCAL TEST</b></span>
+        </div>
+        <div class="status-cell">
           <span class="status-label">Current Game</span>
           <span class="status-value"><i class="dot"></i><b id="stCurrent">NONE</b></span>
         </div>
@@ -106,6 +114,7 @@
             <div class="submeta"><span id="mGame"></span> · <span id="mId"></span></div>
           </div>
           <div class="game-state">
+            <span id="dataSourceBadge" class="source-pill">ČEKÁM NA DATA</span>
             <span id="firstBlood" class="fb-pill" hidden></span>
             <span id="phaseBadge" class="badge">—</span>
             <span id="clock" class="clock">--:--</span>
@@ -132,7 +141,7 @@
         <div class="sb-header">
           <div class="sb-team blue">
             <span class="tag side-blue">BLUE</span>
-            <span class="sb-team-name" id="blueTeamName">—</span>
+            <span class="sb-team-meta"><span class="sb-team-name" id="blueTeamName">—</span><span class="sb-team-gold" id="blueGold">— gold</span></span>
           </div>
           <div class="sb-score">
             <span class="s-blue" id="blueKills">0</span>
@@ -140,7 +149,7 @@
             <span class="s-red" id="redKills">0</span>
           </div>
           <div class="sb-team red">
-            <span class="sb-team-name" id="redTeamName">—</span>
+            <span class="sb-team-meta"><span class="sb-team-name" id="redTeamName">—</span><span class="sb-team-gold" id="redGold">— gold</span></span>
             <span class="tag side-red">RED</span>
           </div>
         </div>
@@ -148,13 +157,13 @@
         <div class="scoreboards">
           <div class="team-block accent-blue">
             <table class="sb">
-              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>KDA</th><th>CS</th><th>Vis</th><th>P</th></tr></thead>
+              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>CS</th><th>Gold</th><th>Items</th></tr></thead>
               <tbody id="blueRows"></tbody>
             </table>
           </div>
           <div class="team-block accent-red">
             <table class="sb">
-              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>KDA</th><th>CS</th><th>Vis</th><th>P</th></tr></thead>
+              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>CS</th><th>Gold</th><th>Items</th></tr></thead>
               <tbody id="redRows"></tbody>
             </table>
           </div>
@@ -168,7 +177,7 @@
           <div class="export-actions">
             <button id="endBtn" class="btn">Ukončit hru ručně</button>
             <button id="exportBtn" class="btn btn-primary">EXPORT .TXT</button>
-            <button id="dbBtn" class="btn btn-disabled" disabled title="Fáze 2">Send to database — Coming later</button>
+            <span id="deliveryNote" class="delivery-note">Live stream: local test log</span>
           </div>
         </div>
         <p class="hint" id="exportHint"></p>
@@ -218,7 +227,7 @@
     </section>
   </main>
 
-  <footer class="foot">Live data se čte lokálně z League (127.0.0.1:2999). Export je pouze <code>.txt</code>.</footer>
+  <footer class="foot">Primární live zdroj: LeagueBroadcast WebSocket. Riot Live API zůstává jako záloha. Finální <code>.txt</code> export je zachovaný.</footer>
   <div class="version-badge" id="versionBadge" hidden></div>
 
   <!-- NEW GAME MODAL -->
@@ -243,7 +252,9 @@
             <option value="RED">RED (červená)</option>
           </select>
         </label>
-        <label>Production <input id="production" placeholder="Production 1" /></label>
+        <label>Platforma
+          <select id="production"><option>Twitch</option><option>Kick</option></select>
+        </label>
       </div>
       <div class="modal-actions">
         <p class="hint" id="createHint"></p>
@@ -262,15 +273,15 @@
           <span class="prod-logo twitch">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
           </span>
-          <span class="prod-name">Produkce 1</span>
-          <span class="prod-plat">Twitch</span>
+          <span class="prod-name">Twitch</span>
+          <span class="prod-plat">Twitch produkce</span>
         </button>
         <button class="prod-choice" data-prod="kick">
           <span class="prod-logo kick">
             <svg viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M6 4h5v9.5L19 4h6l-9.5 11L25 28h-6l-8-10.5V28H6z"/></svg>
           </span>
-          <span class="prod-name">Produkce 2</span>
-          <span class="prod-plat">Kick</span>
+          <span class="prod-name">Kick</span>
+          <span class="prod-plat">Kick produkce</span>
         </button>
       </div>
     </div>

@@ -20,7 +20,7 @@ const { autoUpdater } = electronUpdater;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = path.resolve(__dirname, "..");
 const PORT = Number(process.env.PORT ?? 4700);
-const DASHBOARD_URL = `http://localhost:${PORT}/`;
+const DASHBOARD_URL = `http://127.0.0.1:${PORT}/`;
 
 let mainWindow = null;
 // Poslední stav updatu; drží se, aby ho šlo poslat i po (re)connectu rendereru.
@@ -43,7 +43,7 @@ function waitForServer(timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const tryOnce = () => {
-      const req = http.get(`http://localhost:${PORT}/api/state`, (res) => {
+      const req = http.get(`http://127.0.0.1:${PORT}/api/state`, (res) => {
         res.resume();
         resolve();
       });

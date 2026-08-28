@@ -10,13 +10,15 @@ import type { LcuDataSource } from "./league/LcuDataSource.js";
 import { ChampSelectCollector } from "./champselect/ChampSelectCollector.js";
 import { GameManager } from "./core/GameManager.js";
 import { startServer } from "./server/server.js";
+import { LeagueBroadcastCollector } from "./live/LeagueBroadcastCollector.js";
+import { LiveStreamPublisher } from "./live/LiveStreamPublisher.js";
 
 /**
- * Vstupní bod Infernal Production Agenta (Fáze 1A).
+ * Vstupní bod Infernal Production Agenta.
  * Sestaví: zdroj dat → collector → game manager → web server.
  */
 function main(): void {
-  log.info("Infernal Production Agent – Fáze 1A");
+  log.info(`Infernal Production Agent v${config.version}`);
 
   const source: LiveDataSource = config.mock
     ? new MockLiveClient()
@@ -27,7 +29,13 @@ function main(): void {
 
   const collector = new LeagueDataCollector(source, config.pollIntervalMs);
   const champSelect = new ChampSelectCollector(lcu, config.champSelectPollMs);
-  const manager = new GameManager(collector, champSelect);
+  const broadcast = new LeagueBroadcastCollector(
+    config.leagueBroadcast.host,
+    config.leagueBroadcast.port,
+    config.leagueBroadcast.enabled && !config.mock,
+  );
+  const publisher = new LiveStreamPublisher();
+  const manager = new GameManager(collector, champSelect, broadcast, publisher);
   manager.start();
   startServer(manager);
 }

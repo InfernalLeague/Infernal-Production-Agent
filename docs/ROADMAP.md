@@ -64,23 +64,24 @@ GUI okno nešlo v tomto prostředí vizuálně ověřit — otestovat na reáln�
 - [x] Scripty: `pack:dir`, `dist:win`, `release`. Ověřeno: installer + `latest.yml` + `app-update.yml`.
 - [x] Overlaye jsou uvnitř balíku → updatují se **spolu s appkou** (řeší zadání).
 
-**Zbývá uživateli (viz `docs/RELEASE.md`):** založit GitHub repo, doplnit `publish.owner`
-v `electron-builder.yml` (teď `GITHUB_USER_TODO`), nastavit `GH_TOKEN`, `npm run release`.
-**Rizika/pozn.:** bez code-signingu SmartScreen varuje (zvážit certifikát); default ikona
-(doplnit `build/icon.ico`); GUI netestováno vizuálně v tomto prostředí.
+**Release:** GitHub repo, publish konfigurace i ikona jsou nastavené; CI vydává po tagu `vX.Y.Z`.
+**Rizika/pozn.:** bez code-signingu SmartScreen varuje (zvážit certifikát).
 
 ## Fáze 2 — Web-ready export contract (příprava na live web)
 
 **Cíl:** připravit JSON kontrakt, aby web integrace nikdy neparsovala TXT.
 Bez rozšiřování statistik (držíme lean scope).
 
-- [ ] `schemaVersion` do `ConfirmedGame`.
+- [x] Verzovaná obálka průběžných live zpráv (`schemaVersion: 1`).
+- [x] LeagueBroadcast WebSocket collector pro ingame eventy a snapshoty.
+- [x] Lokální JSONL audit + odolný HTTP outbox pro budoucí Supabase Edge Function.
+- [ ] `schemaVersion` do finálního `ConfirmedGame`.
 - [ ] Zachytit **PUUID/riotId** hráče (z Live API `riotId` / LCU) — i když se zatím nikam
       nepíše. Jména se mění; stabilní ID spáruje historii.
 - [ ] Přenést `gameMode` / `mapName` / patch verzi do `ConfirmedGame` (dnes se zahazují).
 - [ ] Nullable `matchId` / `seriesId` (později se plní z Infernal HUB plánu zápasů).
 - [ ] `JsonExporter` (kanonický JSON) vedle `TxtExporter`. TXT nechat beze změny.
-- [ ] Outbox: fronta odeslání (dnes už `games/`) + idempotency klíč = `localGameId`.
+- [x] Outbox + idempotentní `eventId` a pořadové `sequence` pro live ingest.
 
 ## Fáze 3 — Live web export → Infernal HUB  (= Fáze 2 z memory)
 

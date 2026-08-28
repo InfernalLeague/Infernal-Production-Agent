@@ -53,7 +53,7 @@ body {
 .badge-mock { background: #4a2f0b; color: var(--amber); border-color: #6b4410; }
 
 /* ---------- status grid ---------- */
-.status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+.status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
 .status-cell { background: var(--panel); padding: 11px 18px; display: flex; flex-direction: column; gap: 3px; }
 .status-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
 .status-value { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
@@ -112,6 +112,9 @@ input:focus, select:focus { outline: none; border-color: var(--flame); box-shado
 .matchup .vs { color: var(--faint); font-weight: 500; margin: 0 4px; }
 .submeta { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .game-state { display: flex; align-items: center; gap: 12px; }
+.source-pill { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border2); background: var(--panel2); color: var(--muted); font: 700 10px/1.2 var(--disp); letter-spacing: .6px; }
+.source-pill.primary { color: var(--green); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.08); }
+.source-pill.fallback { color: var(--amber); border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.08); }
 .clock { font-family: var(--disp); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
 .clock.live { color: var(--flame); text-shadow: 0 0 18px rgba(255,107,26,.45); }
 #phaseBadge { display: inline-flex; align-items: center; gap: 6px; }
@@ -146,6 +149,9 @@ input:focus, select:focus { outline: none; border-color: var(--flame); box-shado
 .sb-team.blue { justify-content: flex-start; }
 .sb-team.red { justify-content: flex-end; }
 .sb-team-name { font-family: var(--disp); font-weight: 600; font-size: 16px; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-team-meta { display: flex; flex-direction: column; min-width: 0; }
+.sb-team.red .sb-team-meta { align-items: flex-end; }
+.sb-team-gold { color: var(--amber); font-size: 10px; font-variant-numeric: tabular-nums; }
 .tag { font-family: var(--disp); font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 5px; }
 .sb-score { font-family: var(--disp); font-weight: 700; font-size: 30px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 12px; }
 .sb-score .s-blue { color: var(--blue-ink); }
@@ -183,6 +189,9 @@ table.sb { width: 100%; border-collapse: collapse; font-size: 13px; }
 .c-lvl { color: var(--muted); }
 .c-p .penta { color: var(--flame); font-weight: 700; font-family: var(--disp); }
 .c-p .none { color: var(--faint); }
+.c-gold { color: var(--amber); font-weight: 600; }
+.item-list { display: inline-flex; justify-content: flex-end; gap: 2px; min-width: 62px; }
+.item-mini { width: 17px; height: 17px; border-radius: 3px; object-fit: cover; background: var(--panel3); border: 1px solid rgba(255,255,255,.06); }
 
 /* ---------- export bar ---------- */
 .export-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 20px; flex-wrap: wrap; padding-top: 18px; border-top: 1px solid var(--border); }
@@ -193,6 +202,8 @@ table.sb { width: 100%; border-collapse: collapse; font-size: 13px; }
 .seg-btn:hover { color: var(--text); }
 .seg-btn.active { background: linear-gradient(180deg, var(--flame2), var(--flame)); color: #1a1008; box-shadow: 0 3px 10px rgba(255,107,26,.3); }
 .export-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.delivery-note { align-self: center; color: var(--muted); border: 1px solid var(--border); background: var(--panel2); padding: 8px 11px; border-radius: 8px; font-size: 11px; }
+.delivery-note.remote { color: var(--green); border-color: rgba(52,211,153,.35); }
 
 /* ---------- footer ---------- */
 .foot { max-width: 1120px; margin: 12px auto 34px; padding: 0 18px; color: var(--faint); font-size: 12px; }

@@ -30,9 +30,10 @@ export function writeText(filePath: string, text: string): void {
  * Složka pro konkrétní hru (workflow §49):
  *   games/2026-08-18_Ixtal_Freljord_G2/
  */
-export function gameFolder(dateIso: string, team1: string, team2: string, gameNumber: number): string {
+export function gameFolder(dateIso: string, team1: string, team2: string, gameNumber: number, localGameId?: string): string {
   const date = dateIso.slice(0, 10);
-  const slug = `${date}_${sanitize(team1)}_${sanitize(team2)}_G${gameNumber}`;
+  const unique = localGameId ? `_${sanitize(localGameId)}` : "";
+  const slug = `${date}_${sanitize(team1)}_${sanitize(team2)}_G${gameNumber}${unique}`;
   return path.join(config.paths.games, slug);
 }
 

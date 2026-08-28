@@ -6,10 +6,9 @@ verzi automaticky (stáhne na pozadí, nainstaluje při zavření).
 
 ## Jednorázové nastavení (musíš udělat ty)
 
-1. **Založ GitHub repo** pro Agenta (např. `infernal-production-agent`).
-2. V [`electron-builder.yml`](../electron-builder.yml) přepiš `publish.owner`
-   z `GITHUB_USER_TODO` na svůj GitHub účet (a `repo`, pokud jsi zvolil jiný název).
-3. Vytvoř **Personal Access Token** (classic, scope `repo`) a nastav ho jako
+1. GitHub repozitář a `publish.owner/repo` jsou nastavené na
+   `InfernalLeague/Infernal-Production-Agent`.
+2. Pro lokální publikaci vytvoř **Personal Access Token** (classic, scope `repo`) a nastav ho jako
    proměnnou `GH_TOKEN` (electron-updater/-builder ho čte při publikaci):
 
    ```powershell
@@ -66,8 +65,7 @@ u tebe lokálně). Postup vydání:
   Windows SmartScreen při instalaci varuje („Neznámý vydavatel"). Auto-update
   funguje i bez podpisu, ale pro hladší UX zvaž EV/OV code-signing certifikát
   (placené). Konfiguruje se ve `win` sekci `electron-builder.yml`.
-- **Ikona:** teď se používá default Electron ikona. Až budeš mít `build/icon.ico`
-  (256×256+), odkomentuj `win.icon` v `electron-builder.yml`.
+- **Ikona:** `build/icon.ico` se generuje z ligového loga během `build:all`.
 - **Velikost:** installer ~120 MB (obsahuje Electron runtime). Delta updaty
   electron-updater řeší přes blockmap, takže uživatelé nestahují pokaždé celých 120 MB.
 - **Privátní repo:** funguje taky, ale klienti pak potřebují token — pro veřejnou

@@ -54,9 +54,13 @@ export function startServer(manager: GameManager): void {
   });
 
   app.post("/api/game/winner", (req, res) => {
-    const winner = (req.body?.winner ?? null) as string | null;
-    manager.setWinner(winner || null);
-    res.json({ ok: true });
+    try {
+      const winner = (req.body?.winner ?? null) as string | null;
+      manager.setWinner(winner || null);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
   });
 
   app.post("/api/game/end", (_req, res) => {
@@ -87,7 +91,7 @@ export function startServer(manager: GameManager): void {
     }
   });
 
-  server.listen(config.port, () => {
+  server.listen(config.port, "127.0.0.1", () => {
     log.info(`Dashboard běží na  http://localhost:${config.port}`);
     if (config.mock) log.info("MOCK režim aktivní – simuluji hru Ixtal vs Freljord.");
   });
@@ -131,7 +135,7 @@ function listGames(): GameListItem[] {
       winner = c.game.winner ?? null;
     } catch {
       // fallback: název složky "YYYY-MM-DD_Team1_Team2_G<n>"
-      const m = name.match(/^\d{4}-\d{2}-\d{2}_(.+)_G(\d+)$/);
+      const m = name.match(/^\d{4}-\d{2}-\d{2}_(.+)_G(\d+)(?:_ILT-.+)?$/);
       if (m) {
         title = m[1].replace(/_/g, " ");
         gameNumber = Number(m[2]);

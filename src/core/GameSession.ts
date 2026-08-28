@@ -1,5 +1,6 @@
 import type {
   AllGameData,
+  BroadcastGameSnapshot,
   Draft,
   FinalLiveSnapshot,
   FirstBloodInfo,
@@ -22,6 +23,7 @@ export class GameSession {
     durationSeconds: number;
     players: LivePlayerState[];
     teamKills: { BLUE: number; RED: number };
+    teamGold: { BLUE: number | null; RED: number | null };
     firstBlood: FirstBloodInfo | null;
   } | null = null;
 
@@ -57,7 +59,28 @@ export class GameSession {
       durationSeconds: Math.round(data.gameData?.gameTime ?? 0),
       players,
       teamKills: teamKills(players),
+      teamGold: { BLUE: null, RED: null },
       firstBlood: fb,
+    };
+    if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
+      this.meta.status = "LIVE";
+    }
+  }
+
+  /** LeagueBroadcast je primární bohatý zdroj (gold, itemy, rychlé změny). */
+  applyBroadcast(snapshot: BroadcastGameSnapshot): void {
+    const previousTime = this.currentLive?.durationSeconds ?? 0;
+    const previousPentas = new Map(this.currentLive?.players.map((p) => [p.name, p.pentakills]) ?? []);
+    this.currentLive = {
+      durationSeconds: Math.max(previousTime, Math.round(snapshot.gameTime)),
+      players: snapshot.players.map((p) => ({
+        ...p,
+        pentakills: Math.max(p.pentakills, previousPentas.get(p.name) ?? 0),
+        items: [...p.items],
+      })),
+      teamKills: { ...snapshot.teamKills },
+      teamGold: { ...snapshot.teamGold },
+      firstBlood: this.currentLive?.firstBlood ?? null,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
@@ -72,6 +95,7 @@ export class GameSession {
         durationSeconds: this.currentLive.durationSeconds,
         players: this.currentLive.players.map((p) => ({ ...p, items: [...p.items] })),
         teamKills: { ...this.currentLive.teamKills },
+        teamGold: { ...this.currentLive.teamGold },
         firstBlood: this.currentLive.firstBlood
           ? { ...this.currentLive.firstBlood }
           : null,

@@ -62,6 +62,7 @@ export function normalizePlayers(data: AllGameData): LivePlayerState[] {
       deaths: p.scores.deaths,
       assists: p.scores.assists,
       cs: p.scores.creepScore,
+      gold: null, // Riot Live Client API osobní gold neposkytuje
       vision: Math.round(p.scores.wardScore), // wardScore = Vision Score (§23)
       pentakills: pentas.get(name) ?? 0,
       items: (p.items ?? []).map((it) => it.itemID),
