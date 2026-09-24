@@ -1,5 +1,6 @@
 import type {
   AllGameData,
+  BroadcastGameEvent,
   DragonType,
   GameObjectives,
   ObjectiveKill,
@@ -155,6 +156,95 @@ export function objectivesFromEvents(data: AllGameData): GameObjectives {
   }
 
   return result;
+}
+
+/** Součty a první objektivy z libovolného seznamu zabití (seřadí se podle času). */
+export function tallyObjectives(kills: ObjectiveKill[]): GameObjectives {
+  const result = emptyObjectives();
+  for (const kill of [...kills].sort((a, b) => a.gameTime - b.gameTime)) {
+    result.timeline.push(kill);
+    addKill(result, kill);
+  }
+  return result;
+}
+
+/*
+ * Záloha z LeagueBroadcastu.
+ *
+ * Při zkušebním spectatu (24. 9. 2026) z Live API nepřišel ani jeden
+ * objektiv, zatímco LeagueBroadcast poslal draky s typem, grub, heralda
+ * i věže a inhibitory. Jeho eventy vypadají takhle:
+ *
+ *   objective:   { objective: "DRAGON_WATER", eventType: "Kill", killer: "Jméno#TAG", team: 1 }
+ *   team.update: { teamId: 1, platesTaken: 0, turretsTaken: 1, inhibitorsTaken: 0 }
+ *
+ * `team` 1 je modrá strana (ověřeno podle jungla, který draky zabíjel),
+ * `turretsTaken` a `inhibitorsTaken` jsou přírůstky jedné události, ne součty.
+ * Krádež LeagueBroadcast nehlásí.
+ */
+const BROADCAST_OBJECTIVES: Record<string, { kind: ObjectiveKind; dragonType: DragonType | null }> = {
+  GRUB: { kind: "voidgrub", dragonType: null },
+  HERALD: { kind: "herald", dragonType: null },
+  BARON: { kind: "baron", dragonType: null },
+  ATAKHAN: { kind: "atakhan", dragonType: null },
+  DRAGON_FIRE: { kind: "dragon", dragonType: "fire" },
+  DRAGON_EARTH: { kind: "dragon", dragonType: "earth" },
+  DRAGON_WATER: { kind: "dragon", dragonType: "water" },
+  DRAGON_AIR: { kind: "dragon", dragonType: "air" },
+  DRAGON_HEXTECH: { kind: "dragon", dragonType: "hextech" },
+  DRAGON_CHEMTECH: { kind: "dragon", dragonType: "chemtech" },
+  DRAGON_ELDER: { kind: "dragon", dragonType: "elder" },
+  DRAGON_CLASSIC: { kind: "dragon", dragonType: null },
+};
+
+function broadcastSide(team: unknown): Side | null {
+  if (team === 1 || team === 100 || team === "ORDER") return "BLUE";
+  if (team === 2 || team === 200 || team === "CHAOS") return "RED";
+  return null;
+}
+
+/**
+ * Objektivy z jednoho LeagueBroadcast eventu. `nextId` dává záporná ID, ať se
+ * nepletou s `EventID` z Live API.
+ */
+export function objectivesFromBroadcastEvent(
+  event: BroadcastGameEvent,
+  nextId: () => number,
+): ObjectiveKill[] {
+  const payload = event.payload as Record<string, unknown>;
+  const gameTime = event.gameTime ?? 0;
+
+  if (event.type === "objective") {
+    if (String(payload.eventType ?? "").toLowerCase() !== "kill") return [];
+    const known = BROADCAST_OBJECTIVES[String(payload.objective ?? "").toUpperCase()];
+    const side = broadcastSide(payload.team);
+    if (!known || !side) return [];
+    return [{
+      eventId: nextId(),
+      kind: known.kind,
+      side,
+      gameTime,
+      killer: typeof payload.killer === "string" ? payload.killer : null,
+      dragonType: known.dragonType,
+      stolen: false,
+    }];
+  }
+
+  if (event.type === "team.update") {
+    const side = broadcastSide(payload.teamId);
+    if (!side) return [];
+    const kills: ObjectiveKill[] = [];
+    const add = (kind: ObjectiveKind, count: unknown) => {
+      for (let i = 0; i < (typeof count === "number" && count > 0 ? count : 0); i++) {
+        kills.push({ eventId: nextId(), kind, side, gameTime, killer: null, dragonType: null, stolen: false });
+      }
+    };
+    add("tower", payload.turretsTaken);
+    add("inhibitor", payload.inhibitorsTaken);
+    return kills;
+  }
+
+  return [];
 }
 
 function addKill(result: GameObjectives, kill: ObjectiveKill): void {

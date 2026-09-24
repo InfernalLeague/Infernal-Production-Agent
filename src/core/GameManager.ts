@@ -10,6 +10,7 @@ import type {
   Draft,
   FinalLiveSnapshot,
   GameMeta,
+  LiveTransportSource,
   ObjectiveKill,
   Side,
 } from "../types.js";
@@ -127,12 +128,21 @@ export class GameManager extends EventEmitter {
     // Event stream Live API (objektivy, pentakilly, first blood) se čte vždy.
     // LeagueBroadcast je primární jen pro statistiky hráčů — objektivy
     // s typem draka a krádeží ani pentakilly z něj nemáme.
+    this.recordRiotEvents(s, data);
     const { newObjectives } = s.applyLiveEvents(data);
-    this.publishObjectives(newObjectives);
+    this.publishObjectives(newObjectives, config.mock ? "mock" : "riot-live-api");
 
-    if (this.broadcast.isFresh()) {
+    if (s.status === "LIVE" && this.detectLiveApiEnd(s, data)) return;
+
+    // Hráče dodává WebSocket; Riot API je pro ně fallback. Jakmile v této hře
+    // LeagueBroadcast jednou data dal, Live API hráče přepíše, jen když hra
+    // jde dál bez něj — ne po konci hry, kdy by přesná čísla nahradilo CS
+    // zaokrouhlené na desítky a prázdným goldem.
+    const liveTime = data.gameData?.gameTime ?? 0;
+    const broadcastAhead = s.broadcastSeen && liveTime <= (s.currentLive?.durationSeconds ?? 0) + 5;
+    if (this.broadcast.isFresh() || broadcastAhead) {
       if (newObjectives.length > 0) this.emitUpdate();
-      return; // hráče dodává WebSocket; Riot API je pro ně fallback
+      return;
     }
     if (s.status === "WAITING_FOR_GAME" || s.status === "CREATED") {
       log.info(`${s.meta.localGameId}: hra začala → LIVE`);
@@ -167,6 +177,7 @@ export class GameManager extends EventEmitter {
     const s = this.session;
     if (!s || (s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
     this.publisher.publishEvent(event);
+    this.publishObjectives(s.applyBroadcastEvent(event), "league-broadcast");
 
     if (event.type === "champion.kill" && s.currentLive && !s.currentLive.firstBlood) {
       const killer = (event.payload.killer ?? null) as { playerName?: string | null } | null;
@@ -178,8 +189,66 @@ export class GameManager extends EventEmitter {
     this.emitUpdate();
   }
 
+  /**
+   * Surový event stream Live API do `riot_events.jsonl` ve složce hry.
+   *
+   * Po první zkušební hře nešlo zjistit, proč z Live API nepřišel ani jeden
+   * objektiv — Agent surová data neukládal. Zapisují se jen nové eventy
+   * (podle EventID), takže soubor zůstává malý.
+   */
+  private recordRiotEvents(s: GameSession, data: AllGameData): void {
+    const events = (data.events?.Events ?? []).filter((event) => event.EventID > s.lastRiotEventId);
+    if (events.length === 0) return;
+    try {
+      const capturedAt = new Date().toISOString();
+      const gameTime = data.gameData?.gameTime ?? null;
+      fs.appendFileSync(
+        path.join(s.folder, "riot_events.jsonl"),
+        events.map((event) => JSON.stringify({ capturedAt, gameTime, event })).join("\n") + "\n",
+        "utf8",
+      );
+    } catch (error) {
+      log.warn("Zápis riot_events.jsonl selhal:", error);
+    }
+    s.lastRiotEventId = Math.max(s.lastRiotEventId, ...events.map((event) => event.EventID));
+  }
+
+  /**
+   * Konec hry podle Live API.
+   *
+   * Při zkušebním spectatu zůstal klient po konci hry na výsledkové obrazovce:
+   * Live API dál odpovídalo, LeagueBroadcast konec nenahlásil, a hra se
+   * ukončila až ručně o 44 minut později. Proto:
+   *   1. event `GameEnd` v Live API → konec hned,
+   *   2. herní čas stojí 20 s, LeagueBroadcast nedodává data a nehlásí pauzu
+   *      → konec. Pauza sama hru neukončí: LeagueBroadcast ji hlásí stavem
+   *      `Paused`, a dokud posílá snapshoty, je čerstvý.
+   */
+  private detectLiveApiEnd(s: GameSession, data: AllGameData): boolean {
+    const gameEnd = (data.events?.Events ?? []).find((event) => event.EventName === "GameEnd");
+    if (gameEnd) {
+      this.endCurrentGame(`Live API GameEnd (Result: ${String(gameEnd.Result ?? "?")})`);
+      return true;
+    }
+
+    const gameTime = data.gameData?.gameTime ?? 0;
+    const now = Date.now();
+    if (!s.liveClock || gameTime !== s.liveClock.gameTime) {
+      s.liveClock = { gameTime, changedAt: now };
+      return false;
+    }
+
+    const frozenFor = now - s.liveClock.changedAt;
+    const paused = this.broadcast.getStatus().gameState === "Paused";
+    if (gameTime > 60 && frozenFor >= 20_000 && !this.broadcast.isFresh() && !paused) {
+      this.endCurrentGame(`herní čas stojí ${Math.round(frozenFor / 1000)} s a LeagueBroadcast mlčí`);
+      return true;
+    }
+    return false;
+  }
+
   /** Nově padlé objektivy jako diskrétní eventy živého streamu. */
-  private publishObjectives(kills: ObjectiveKill[]): void {
+  private publishObjectives(kills: ObjectiveKill[], source: LiveTransportSource): void {
     const s = this.session;
     if (!s) return;
     for (const kill of kills) {
@@ -191,7 +260,7 @@ export class GameManager extends EventEmitter {
           gameTime: kill.gameTime,
           payload: { ...kill, team },
         },
-        config.mock ? "mock" : "riot-live-api",
+        source,
       );
       log.info(
         `${s.meta.localGameId}: ${kill.kind}${kill.dragonType ? ` (${kill.dragonType})` : ""}${kill.stolen ? " ukradený" : ""} → ${team}`,
@@ -200,6 +269,7 @@ export class GameManager extends EventEmitter {
   }
 
   private onBroadcastGameStatus(status: GameState): void {
+    log.info(`LeagueBroadcast stav hry: ${GameState[status] ?? status}`);
     if (status === GameState.Running || status === GameState.Paused) {
       if (this.broadcastEndTimer) clearTimeout(this.broadcastEndTimer);
       this.broadcastEndTimer = null;

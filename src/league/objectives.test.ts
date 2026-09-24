@@ -137,3 +137,50 @@ test("applyLiveEvents vrací jen objektivy, které přibyly od minula", () => {
   const next = session.applyLiveEvents(game([first, second])).newObjectives;
   assert.deepEqual(next.map((kill) => kill.kind), ["baron"]);
 });
+
+test("záloha z LeagueBroadcastu: draci s typem, grub, herald, věže a inhibitory podle týmu", () => {
+  const session = new GameSession(
+    {
+      localGameId: "TEST-3",
+      team1: "Blue",
+      team2: "Red",
+      gameNumber: 1,
+      seriesFormat: "BO1",
+      team1Side: "BLUE",
+      createdAt: new Date().toISOString(),
+      status: "WAITING_FOR_GAME",
+    },
+    ".",
+  );
+  const event = (type: "objective" | "team.update", gameTime: number, payload: Record<string, unknown>) =>
+    session.applyBroadcastEvent({ type, capturedAt: new Date().toISOString(), gameTime, payload });
+
+  // Tvar eventů podle zkušebního spectatu 24. 9. 2026.
+  assert.equal(event("objective", 541, { objective: "DRAGON_WATER", eventType: "Kill", killer: "Blue Jungle#EUNE", team: 1 }).length, 1);
+  event("objective", 700, { objective: "DRAGON_AIR", eventType: "Spawn", team: 1 });
+  event("objective", 734, { objective: "GRUB", eventType: "Kill", killer: "Blue Jungle#EUNE", team: 1 });
+  event("objective", 985, { objective: "HERALD", eventType: "Kill", killer: "Blue Jungle#EUNE", team: 1 });
+  event("objective", 1500, { objective: "BARON", eventType: "Kill", killer: "Red Jungle#EUNE", team: 2 });
+  event("team.update", 927, { teamId: 1, platesTaken: 0, turretsTaken: 1, inhibitorsTaken: 0 });
+  event("team.update", 1140, { teamId: 2, platesTaken: 0, turretsTaken: 1, inhibitorsTaken: 0 });
+  event("team.update", 1351, { teamId: 1, platesTaken: 0, turretsTaken: 0, inhibitorsTaken: 1 });
+
+  const objectives = session.objectives();
+  assert.equal(objectives.teams.BLUE.dragonTypes.water, 1);
+  assert.equal(objectives.teams.BLUE.dragons, 1, "spawn se nepočítá");
+  assert.equal(objectives.teams.BLUE.voidgrubs, 1);
+  assert.equal(objectives.teams.BLUE.heralds, 1);
+  assert.equal(objectives.teams.RED.barons, 1);
+  assert.equal(objectives.teams.BLUE.towers, 1);
+  assert.equal(objectives.teams.RED.towers, 1);
+  assert.equal(objectives.teams.BLUE.inhibitors, 1);
+  assert.equal(objectives.firstTower, "BLUE");
+
+  // Jakmile objektivy hlásí Live API, má přednost a LeagueBroadcast se nepřičítá.
+  session.applyLiveEvents(game([
+    { EventID: 1, EventName: "DragonKill", EventTime: 541, DragonType: "Water", KillerName: "Blue Jungle", Stolen: "False" },
+  ]));
+  assert.equal(session.objectives().teams.BLUE.dragons, 1);
+  assert.equal(session.objectives().teams.RED.barons, 0);
+  assert.equal(event("objective", 1600, { objective: "DRAGON_ELDER", eventType: "Kill", team: 1 }).length, 0);
+});

@@ -1,5 +1,6 @@
 import type {
   AllGameData,
+  BroadcastGameEvent,
   BroadcastGameSnapshot,
   Draft,
   FinalLiveSnapshot,
@@ -8,13 +9,16 @@ import type {
   GameObjectives,
   GameStatus,
   LivePlayerState,
+  ObjectiveKill,
 } from "../types.js";
 import { firstBlood, normalizePlayers, teamKills } from "../league/normalize.js";
 import {
   championKey,
   emptyObjectives,
+  objectivesFromBroadcastEvent,
   objectivesFromEvents,
   pentakillsByChampion,
+  tallyObjectives,
 } from "../league/objectives.js";
 
 /**
@@ -45,6 +49,23 @@ export class GameSession {
     pentakills: Map<string, number>;
     firstBlood: FirstBloodInfo | null;
   } = { objectives: emptyObjectives(), pentakills: new Map(), firstBlood: null };
+
+  /** Objektivy z LeagueBroadcast eventů — záloha, když Live API žádné nehlásí. */
+  private broadcastKills: ObjectiveKill[] = [];
+  private broadcastKillId = 0;
+
+  /**
+   * LeagueBroadcast v této hře už data dodal. Od té chvíle Live API hráče
+   * nepřepisuje: ve spectatoru zaokrouhluje CS na desítky a gold nezná,
+   * a po konci hry by jinak přepsalo přesná čísla těmi horšími.
+   */
+  broadcastSeen = false;
+
+  /** Herní čas z Live API a kdy se naposledy pohnul (detekce konce hry). */
+  liveClock: { gameTime: number; changedAt: number } | null = null;
+
+  /** Poslední EventID z Live API zapsaný do riot_events.jsonl. */
+  lastRiotEventId = -1;
 
   /** Final live snapshot – po konci hry, už se NEMĚNÍ (workflow §16). */
   finalSnapshot: FinalLiveSnapshot | null = null;
@@ -78,7 +99,7 @@ export class GameSession {
       teamKills: teamKills(players),
       teamGold: { BLUE: null, RED: null },
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
-      objectives: this.eventState.objectives,
+      objectives: this.objectives(),
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
@@ -87,6 +108,7 @@ export class GameSession {
 
   /** LeagueBroadcast je primární bohatý zdroj (gold, itemy, rychlé změny). */
   applyBroadcast(snapshot: BroadcastGameSnapshot): void {
+    this.broadcastSeen = true;
     const previousTime = this.currentLive?.durationSeconds ?? 0;
     this.currentLive = {
       durationSeconds: Math.max(previousTime, Math.round(snapshot.gameTime)),
@@ -94,11 +116,35 @@ export class GameSession {
       teamKills: { ...snapshot.teamKills },
       teamGold: { ...snapshot.teamGold },
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
-      objectives: this.eventState.objectives,
+      objectives: this.objectives(),
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
     }
+  }
+
+  /**
+   * Objektivy hry: z Live API, a když to žádné nehlásí, z LeagueBroadcastu.
+   *
+   * Zdroje se nemíchají — oba hlásí tytéž objektivy, jen jinak, a sloučení by
+   * je zdvojilo. Live API má přednost, protože zná i krádeže a přesné budovy.
+   */
+  objectives(): GameObjectives {
+    if (this.eventState.objectives.timeline.length > 0) return this.eventState.objectives;
+    return tallyObjectives(this.broadcastKills);
+  }
+
+  /**
+   * Objektiv z LeagueBroadcast eventu. Vrací nově započtená zabití, ale jen
+   * pokud se objektivy právě berou z LeagueBroadcastu (jinak by se do streamu
+   * dostal tentýž drak podruhé).
+   */
+  applyBroadcastEvent(event: BroadcastGameEvent): ObjectiveKill[] {
+    const kills = objectivesFromBroadcastEvent(event, () => -++this.broadcastKillId);
+    if (kills.length === 0) return [];
+    this.broadcastKills.push(...kills);
+    if (this.currentLive) this.currentLive.objectives = this.objectives();
+    return this.eventState.objectives.timeline.length > 0 ? [] : kills;
   }
 
   /**
@@ -126,7 +172,7 @@ export class GameSession {
     // (chrání proti výpadku/ořezu event streamu v pozdějším pollu).
     this.eventState.firstBlood ??= firstBlood(data);
     if (this.currentLive) {
-      this.currentLive.objectives = this.eventState.objectives;
+      this.currentLive.objectives = this.objectives();
       this.currentLive.firstBlood ??= this.eventState.firstBlood;
       this.currentLive.players = this.withPentakills(this.currentLive.players);
     }
