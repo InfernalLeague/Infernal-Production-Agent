@@ -90,6 +90,14 @@ export interface ConfirmedPlayer {
   goldPerMinute: number | null;  // primárně ze screenshotu (§22)
   pentakills: number;
   items: number[];               // itemID list z Live
+  /** Pořadí v týmu podle LeagueBroadcastu = role (0 top … 4 support). */
+  slot: number | null;
+  /** Champion protivníka na stejné roli (stejný slot na druhé straně). */
+  opponentChampion: string | null;
+  /** Gold hráče minus gold protivníka na stejné roli: na konci, v 10. a 15. minutě. */
+  goldDiff: number | null;
+  goldDiffAt10: number | null;
+  goldDiffAt15: number | null;
 
   sources: {
     kills: ValueSource;
@@ -108,7 +116,9 @@ export interface ConfirmedTeam {
   name: string;
   side: Side;
   kills: number | null;
-  gold: number | null;   // až ze screenshotu (§22)
+  gold: number | null;   // z LeagueBroadcastu, celé číslo
+  /** Gold týmu minus gold soupeře na konci hry. */
+  goldDiff: number | null;
   objectives: TeamObjectives;
 }
 
@@ -118,14 +128,8 @@ export interface ConfirmedTeam {
 
 export type DragonType = "fire" | "earth" | "water" | "air" | "hextech" | "chemtech" | "elder";
 
-export type ObjectiveKind =
-  | "dragon"
-  | "baron"
-  | "herald"
-  | "voidgrub"
-  | "atakhan"
-  | "tower"
-  | "inhibitor";
+/** Sledují se jen draci, baroni a věže (rozhodnutí 24. 9. 2026). */
+export type ObjectiveKind = "dragon" | "baron" | "tower";
 
 /** Jeden zabitý objektiv nebo zbouraná budova. */
 export interface ObjectiveKill {
@@ -138,7 +142,7 @@ export interface ObjectiveKill {
   killer: string | null;
   dragonType: DragonType | null;
   stolen: boolean;
-  /** Jméno budovy u věží a inhibitorů (např. `Turret_T1_L_03_A`). */
+  /** Jméno věže z Live API (např. `Turret_TOrder_L1_P3_…`). */
   structure?: string;
 }
 
@@ -149,11 +153,36 @@ export interface TeamObjectives {
   /** Typ dračí duše, pokud ji tým získal. */
   dragonSoul: Exclude<DragonType, "elder"> | null;
   barons: number;
-  heralds: number;
-  voidgrubs: number;
-  atakhans: number;
   towers: number;
-  inhibitors: number;
+}
+
+// ---------------------------------------------------------------------------
+// Gold v průběhu hry (vzorky z LeagueBroadcastu)
+// ---------------------------------------------------------------------------
+
+/**
+ * Gold jednoho hráče ve vzorku.
+ *
+ * `slot` je pořadí hráče v týmu, jak ho posílá LeagueBroadcast — odpovídá
+ * rolím (0 top, 1 jungle, 2 mid, 3 bot, 4 support). Protivník na stejné
+ * roli má stejný `slot` na druhé straně. Champion je u vzorku proto, aby
+ * web mohl roli ověřit proti přiřazení z Champion Draftu.
+ */
+export interface GoldSamplePlayer {
+  side: Side;
+  slot: number;
+  name: string;
+  championName: string;
+  gold: number;
+}
+
+/** Jeden vzorek goldu (standardně každých 30 s herního času). */
+export interface GoldSample {
+  gameTime: number;
+  teams: { BLUE: number; RED: number };
+  /** BLUE − RED; kladné = vede modrá. */
+  diff: number;
+  players: GoldSamplePlayer[];
 }
 
 export interface GameObjectives {
@@ -192,6 +221,8 @@ export interface ConfirmedGame {
   };
   teams: ConfirmedTeam[];
   players: ConfirmedPlayer[];
+  /** Gold týmů i hráčů v průběhu hry (vzorky po 30 s herního času). */
+  goldTimeline: GoldSample[];
   /** Objektivy v pořadí, jak padly (strana → název týmu). */
   objectiveTimeline: Array<ObjectiveKill & { team: string }>;
 }
@@ -264,6 +295,7 @@ export interface FinalLiveSnapshot {
   teamGold: { BLUE: number | null; RED: number | null };
   firstBlood: FirstBloodInfo | null;
   objectives: GameObjectives;
+  goldTimeline: GoldSample[];
 }
 
 /** Normalizovaný stav jednoho hráče z Live dat. */
@@ -280,6 +312,8 @@ export interface LivePlayerState {
   vision: number;
   pentakills: number;
   items: number[];
+  /** Pořadí hráče v týmu (0–4), u LeagueBroadcastu odpovídá roli. */
+  slot?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +350,7 @@ export interface BroadcastGameSnapshot {
 }
 
 export interface BroadcastGameEvent {
-  type: "champion.kill" | "player.update" | "objective" | "team.update" | "objective.kill";
+  type: "champion.kill" | "player.update" | "objective" | "team.update" | "objective.kill" | "gold.sample";
   capturedAt: string;
   gameTime: number | null;
   payload: Record<string, unknown>;

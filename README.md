@@ -96,10 +96,15 @@ Ve složce `games/<datum>_<team1>_<team2>_G<n>/`:
 - `live_state.json` — poslední publikovaný stav hry
 
 Export obsahuje za každý tým draky podle typu (včetně Eldera a dračí duše),
-barony, heraldy, voidgruby, Atakhana, věže a inhibitory, u hry první draka,
-barona a věž a sekci `OBJECTIVES` s časovou osou (`čas;objektiv;typ;tým;stolen`).
-Zdrojem je event stream Riot Live API, který se čte vždy; LeagueBroadcast dál
-dodává statistiky hráčů.
+barony a věže, u hry prvního draka, barona a věž a sekci `OBJECTIVES` s časovou
+osou (`čas;objektiv;typ;tým;stolen`). Věže jdou z Riot Live API, draci a baroni
+z LeagueBroadcastu.
+
+Gold je v celých číslech. Sekce `GOLD` má vzorek každých 30 s herního času
+(`čas;modří;červení;rozdíl`), hráči mají `slot` (role podle pořadí v týmu),
+`opponent` a rozdíl goldu proti protivníkovi na stejné roli na konci hry,
+v 10. a v 15. minutě (`gold_diff`, `gold_diff_at_10`, `gold_diff_at_15`).
+V `confirmed.json` je celá časová osa goldu včetně hráčů (`goldTimeline`).
 
 `data/current_game/live_snapshot.json` je recovery snapshot (každých 5 s při LIVE).
 

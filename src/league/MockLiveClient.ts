@@ -99,24 +99,19 @@ export class MockLiveClient implements LiveDataSource {
         VictimName: "Risotto Nero",
       });
     }
-    // Objektivy v průběhu hry (demo detekce draků, baronů, věží…).
+    // Objektivy v průběhu hry (demo detekce draků, baronů a věží).
     // Časy jsou herní sekundy; zobrazí se, jakmile na ně hra "dojde".
     const gameTime = this.targetGameTime * p;
     const objectives: AllGameData["events"]["Events"] = [
-      { EventID: 10, EventName: "HordeKill", EventTime: 330, KillerName: "Frel Jungle", Stolen: "False" },
-      { EventID: 11, EventName: "HordeKill", EventTime: 331, KillerName: "Frel Jungle", Stolen: "False" },
-      { EventID: 12, EventName: "HordeKill", EventTime: 332, KillerName: "Frel Jungle", Stolen: "False" },
       { EventID: 13, EventName: "DragonKill", EventTime: 360, DragonType: "Fire", KillerName: "King of Isolde", Stolen: "False" },
       { EventID: 14, EventName: "TurretKilled", EventTime: 540, TurretKilled: "Turret_T1_L_03_A", KillerName: "Frel Top" },
       { EventID: 15, EventName: "DragonKill", EventTime: 690, DragonType: "Water", KillerName: "Frel Jungle", Stolen: "False" },
-      { EventID: 16, EventName: "HeraldKill", EventTime: 840, KillerName: "Frel Jungle", Stolen: "False" },
       { EventID: 17, EventName: "DragonKill", EventTime: 1020, DragonType: "Chemtech", KillerName: "Frel Jungle", Stolen: "False" },
       { EventID: 18, EventName: "TurretKilled", EventTime: 1100, TurretKilled: "Turret_T2_R_03_A", KillerName: "Minion_T1L0S0N0" },
       { EventID: 19, EventName: "DragonKill", EventTime: 1340, DragonType: "Chemtech", KillerName: "Frel ADC", Stolen: "False" },
       { EventID: 20, EventName: "BaronKill", EventTime: 1500, KillerName: "Frel Jungle", Stolen: "False" },
       { EventID: 21, EventName: "DragonKill", EventTime: 1660, DragonType: "Chemtech", KillerName: "King of Isolde", Stolen: "True" },
       { EventID: 22, EventName: "TurretKilled", EventTime: 1760, TurretKilled: "Turret_T1_C_05_A", KillerName: "Frel Mid" },
-      { EventID: 23, EventName: "InhibKilled", EventTime: 1800, InhibKilled: "Barracks_T1_C1", KillerName: "Frel Mid" },
     ];
     ev.push(...objectives.filter((event) => event.EventTime <= gameTime));
 

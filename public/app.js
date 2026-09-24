@@ -190,8 +190,11 @@ function render(s) {
   const gold = live ? live.teamGold : (sess.finalSnapshot ? sess.finalSnapshot.teamGold : { BLUE: null, RED: null });
   $("blueKills").textContent = kills.BLUE;
   $("redKills").textContent = kills.RED;
-  $("blueGold").textContent = gold && gold.BLUE != null ? `${fmtGold(gold.BLUE)} gold` : "— gold";
-  $("redGold").textContent = gold && gold.RED != null ? `${fmtGold(gold.RED)} gold` : "— gold";
+  // Gold týmu a rozdíl proti soupeři (kladný = vede).
+  const teamGoldText = (own, enemy) =>
+    own == null ? "— gold" : `${fmtGold(own)} gold${enemy == null ? "" : ` (${fmtDiff(own - enemy)})`}`;
+  $("blueGold").textContent = teamGoldText(gold && gold.BLUE, gold && gold.RED);
+  $("redGold").textContent = teamGoldText(gold && gold.RED, gold && gold.BLUE);
 
   // objektivy (draci podle typu, baroni, heraldi, voidgrubi, věže, inhiby)
   const objectives = live ? live.objectives : (sess.finalSnapshot ? sess.finalSnapshot.objectives : null);
@@ -209,8 +212,8 @@ function render(s) {
   } else {
     fbEl.hidden = true;
   }
-  renderRows("blueRows", players.filter((p) => p.side === "BLUE"));
-  renderRows("redRows", players.filter((p) => p.side === "RED"));
+  renderRows("blueRows", players.filter((p) => p.side === "BLUE"), players);
+  renderRows("redRows", players.filter((p) => p.side === "RED"), players);
 
   // export tlačítko aktivní, jakmile máme data
   $("exportBtn").disabled = players.length === 0;
@@ -229,9 +232,7 @@ function fmtObjectives(t) {
     .join(", ");
   const parts = [`🐉 ${t.dragons}${dragons ? ` (${dragons})` : ""}`];
   if (t.dragonSoul) parts.push(`duše ${DRAGON_LABELS[t.dragonSoul]}`);
-  parts.push(`Baron ${t.barons}`, `Herald ${t.heralds}`, `Grubs ${t.voidgrubs}`);
-  if (t.atakhans) parts.push(`Atakhan ${t.atakhans}`);
-  parts.push(`Věže ${t.towers}`, `Inhib ${t.inhibitors}`);
+  parts.push(`Baron ${t.barons}`, `Věže ${t.towers}`);
   return parts.join(" · ");
 }
 
@@ -257,7 +258,7 @@ function renderWinner(m, winner) {
   [...seg.children].forEach((b) => b.classList.toggle("active", b.dataset.team === currentWinner));
 }
 
-function renderRows(tbodyId, players) {
+function renderRows(tbodyId, players, all) {
   const tb = $(tbodyId);
   tb.innerHTML = "";
   for (const p of players) {
@@ -273,7 +274,7 @@ function renderRows(tbodyId, players) {
       `<td class="p-cell"><div class="p-wrap">${ava}<span class="p-id"><span class="p-name">${esc(p.name)}</span><span class="p-champ">${esc(p.championName)}</span></span></div></td>` +
       `<td class="c-lvl">${p.level}</td>` +
       `<td class="c-kda"><b>${p.kills}</b><span class="sep">/</span><span class="d">${p.deaths}</span><span class="sep">/</span><b>${p.assists}</b></td>` +
-      `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}</td>` +
+      `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}${laneDiff(p, all)}</td>` +
       `<td><span class="item-list">${items || "—"}</span></td>`;
     tb.appendChild(tr);
   }
@@ -290,7 +291,19 @@ function fmtClock(sec) {
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
-function fmtGold(gold) { return Number(gold).toLocaleString("cs-CZ"); }
+function fmtGold(gold) { return Math.round(Number(gold)).toLocaleString("cs-CZ"); }
+function fmtDiff(diff) {
+  const n = Math.round(diff);
+  return (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n).toLocaleString("cs-CZ");
+}
+/** Rozdíl goldu proti protivníkovi na stejné roli (stejné pořadí v týmu). */
+function laneDiff(p, all) {
+  if (p.gold == null || p.slot == null || !all) return "";
+  const opp = all.find((o) => o.side !== p.side && o.slot === p.slot);
+  if (!opp || opp.gold == null) return "";
+  const d = p.gold - opp.gold;
+  return `<span class="gdiff ${d > 0 ? "pos" : d < 0 ? "neg" : ""}">${fmtDiff(d)}</span>`;
+}
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 // --- navigace (taby) --------------------------------------------------------

@@ -13,32 +13,31 @@ import type {
 import { playerName, sideOf } from "./normalize.js";
 
 /**
- * Objektivy a pentakilly z event streamu Riot Live Client API.
+ * Objektivy a pentakilly z event streamu Riot Live Client API a z LeagueBroadcastu.
  *
- * Live API je tu hlavní zdroj i ve chvíli, kdy statistiky hráčů bere Agent
- * z LeagueBroadcastu: jeho eventy jsou zdokumentované, kumulativní (každý
- * poll vrací celou historii hry s `EventID`) a nesou i typ draka a krádež.
- * Všechno se proto počítá vždy znovu z celého seznamu — opakované čtení nebo
- * výpadek pollu nic nezdvojí ani neztratí.
+ * Sledují se jen **draci (s typem), baroni a věže** — heraldi, voidgrubi,
+ * inhibitory a Atakhan zatím nejsou potřeba (rozhodnutí 24. 9. 2026).
+ *
+ * Live API je kumulativní (každý poll vrací celou historii hry s `EventID`),
+ * takže se z něj všechno počítá vždy znovu z celého seznamu — opakované čtení
+ * nebo výpadek pollu nic nezdvojí ani neztratí.
  *
  * Strana objektivu:
- *   - draci, baroni, heraldi, voidgrubi, Atakhan → strana zabijáka (nebo
- *     prvního asistujícího hráče, když zabiják hráč není),
- *   - věže a inhibitory → podle jména budovy. Budova modrých (ORDER) dává
- *     bod **červené** straně a naopak. Zabiják tu bývá minion, podle něj
- *     stranu určit nejde.
+ *   - draci a baroni → strana zabijáka (nebo prvního asistujícího hráče,
+ *     když zabiják hráč není),
+ *   - věže → podle jména budovy. Věž modrých (ORDER) dává bod **červené**
+ *     straně a naopak. Zabiják tu bývá minion, podle něj stranu určit nejde.
  *
  * Co Live API ve spectatoru hlásí (ověřeno 24. 9. 2026 na záznamu hry):
  * ChampionKill, Multikill, FirstBrick, TurretKilled, InhibKilled, Ace
- * a GameEnd. **Draky, barony, heraldy ani voidgruby nehlásí vůbec** — ty
- * dodává LeagueBroadcast. Budovy se jmenují `Turret_TOrder_L1_P3_…`
- * a `Inhib_TChaos_L1_P1_…`; starší tvar `Turret_T1_…` / `Barracks_T2_…`
- * se pořád bere taky.
+ * a GameEnd. **Draky ani barony nehlásí vůbec** — ty dodává LeagueBroadcast.
+ * Věže se jmenují `Turret_TOrder_L1_P3_…`; starší tvar `Turret_T1_…` se
+ * pořád bere taky.
  */
 
 /** Kategorie objektivů, které se mezi zdroji nesčítají, ale vybírají. */
-export const STRUCTURE_KINDS: readonly ObjectiveKind[] = ["tower", "inhibitor"];
-export const EPIC_KINDS: readonly ObjectiveKind[] = ["dragon", "baron", "herald", "voidgrub", "atakhan"];
+export const STRUCTURE_KINDS: readonly ObjectiveKind[] = ["tower"];
+export const EPIC_KINDS: readonly ObjectiveKind[] = ["dragon", "baron"];
 
 const DRAGON_TYPES: Record<string, DragonType> = {
   fire: "fire",
@@ -53,9 +52,6 @@ const DRAGON_TYPES: Record<string, DragonType> = {
 const EPIC_EVENTS: Record<string, ObjectiveKind> = {
   DragonKill: "dragon",
   BaronKill: "baron",
-  HeraldKill: "herald",
-  HordeKill: "voidgrub",
-  AtakhanKill: "atakhan",
 };
 
 export function emptyTeamObjectives(): TeamObjectives {
@@ -64,11 +60,7 @@ export function emptyTeamObjectives(): TeamObjectives {
     dragonTypes: { fire: 0, earth: 0, water: 0, air: 0, hextech: 0, chemtech: 0, elder: 0 },
     dragonSoul: null,
     barons: 0,
-    heralds: 0,
-    voidgrubs: 0,
-    atakhans: 0,
     towers: 0,
-    inhibitors: 0,
   };
 }
 
@@ -107,7 +99,7 @@ function epicSide(players: RiotPlayer[], event: RiotEvent): Side | null {
   return null;
 }
 
-/** Jméno budovy → strana, která ji zbourala (budova modrých = bod pro červené). */
+/** Jméno věže → strana, která ji zbourala (věž modrých = bod pro červené). */
 export function structureSide(name: unknown): Side | null {
   if (typeof name !== "string") return null;
   if (/_(T1|TOrder)_/i.test(name)) return "RED";
@@ -145,19 +137,18 @@ export function objectivesFromEvents(data: AllGameData): GameObjectives {
         dragonType,
         stolen: isStolen(event.Stolen),
       };
-    } else if (event.EventName === "TurretKilled" || event.EventName === "InhibKilled") {
-      const structure = event.EventName === "TurretKilled" ? event.TurretKilled : event.InhibKilled;
-      const side = structureSide(structure);
+    } else if (event.EventName === "TurretKilled") {
+      const side = structureSide(event.TurretKilled);
       if (!side) continue;
       kill = {
         eventId: event.EventID,
-        kind: event.EventName === "TurretKilled" ? "tower" : "inhibitor",
+        kind: "tower",
         side,
         gameTime: event.EventTime,
         killer: typeof event.KillerName === "string" ? event.KillerName : null,
         dragonType: null,
         stolen: false,
-        structure: typeof structure === "string" ? structure : undefined,
+        structure: typeof event.TurretKilled === "string" ? event.TurretKilled : undefined,
       };
     }
 
@@ -180,24 +171,19 @@ export function tallyObjectives(kills: ObjectiveKill[]): GameObjectives {
 }
 
 /*
- * Záloha z LeagueBroadcastu.
+ * Objektivy z LeagueBroadcastu.
  *
- * Při zkušebním spectatu (24. 9. 2026) z Live API nepřišel ani jeden
- * objektiv, zatímco LeagueBroadcast poslal draky s typem, grub, heralda
- * i věže a inhibitory. Jeho eventy vypadají takhle:
+ * Eventy vypadají takhle (zkušební spectaty 24. 9. 2026):
  *
  *   objective:   { objective: "DRAGON_WATER", eventType: "Kill", killer: "Jméno#TAG", team: 1 }
  *   team.update: { teamId: 1, platesTaken: 0, turretsTaken: 1, inhibitorsTaken: 0 }
  *
  * `team` 1 je modrá strana (ověřeno podle jungla, který draky zabíjel),
- * `turretsTaken` a `inhibitorsTaken` jsou přírůstky jedné události, ne součty.
- * Krádež LeagueBroadcast nehlásí.
+ * `turretsTaken` je přírůstek jedné události, ne součet. Krádež LeagueBroadcast
+ * nehlásí. Ostatní objektivy (GRUB, HERALD, ATAKHAN, inhibitory) se ignorují.
  */
 const BROADCAST_OBJECTIVES: Record<string, { kind: ObjectiveKind; dragonType: DragonType | null }> = {
-  GRUB: { kind: "voidgrub", dragonType: null },
-  HERALD: { kind: "herald", dragonType: null },
   BARON: { kind: "baron", dragonType: null },
-  ATAKHAN: { kind: "atakhan", dragonType: null },
   DRAGON_FIRE: { kind: "dragon", dragonType: "fire" },
   DRAGON_EARTH: { kind: "dragon", dragonType: "earth" },
   DRAGON_WATER: { kind: "dragon", dragonType: "water" },
@@ -243,16 +229,17 @@ export function objectivesFromBroadcastEvent(
 
   if (event.type === "team.update") {
     const side = broadcastSide(payload.teamId);
-    if (!side) return [];
-    const kills: ObjectiveKill[] = [];
-    const add = (kind: ObjectiveKind, count: unknown) => {
-      for (let i = 0; i < (typeof count === "number" && count > 0 ? count : 0); i++) {
-        kills.push({ eventId: nextId(), kind, side, gameTime, killer: null, dragonType: null, stolen: false });
-      }
-    };
-    add("tower", payload.turretsTaken);
-    add("inhibitor", payload.inhibitorsTaken);
-    return kills;
+    const count = typeof payload.turretsTaken === "number" ? payload.turretsTaken : 0;
+    if (!side || count <= 0) return [];
+    return Array.from({ length: count }, () => ({
+      eventId: nextId(),
+      kind: "tower" as const,
+      side,
+      gameTime,
+      killer: null,
+      dragonType: null,
+      stolen: false,
+    }));
   }
 
   return [];
@@ -277,21 +264,9 @@ function addKill(result: GameObjectives, kill: ObjectiveKill): void {
       team.barons += 1;
       result.firstBaron ??= kill.side;
       break;
-    case "herald":
-      team.heralds += 1;
-      break;
-    case "voidgrub":
-      team.voidgrubs += 1;
-      break;
-    case "atakhan":
-      team.atakhans += 1;
-      break;
     case "tower":
       team.towers += 1;
       result.firstTower ??= kill.side;
-      break;
-    case "inhibitor":
-      team.inhibitors += 1;
       break;
   }
 }

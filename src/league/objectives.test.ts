@@ -3,6 +3,8 @@ import test from "node:test";
 import type { AllGameData, RiotEvent, RiotPlayer } from "../types.js";
 import { GameSession } from "../core/GameSession.js";
 import { championKey, objectivesFromEvents, pentakillsByChampion } from "./objectives.js";
+import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
+import type { BroadcastGameSnapshot, LivePlayerState } from "../types.js";
 
 function player(name: string, championName: string, team: "ORDER" | "CHAOS"): RiotPlayer {
   return {
@@ -27,7 +29,7 @@ function game(events: RiotEvent[]): AllGameData {
   return { allPlayers: players, events: { Events: events }, gameData: { gameMode: "CLASSIC", gameTime: 1800 } };
 }
 
-test("sčítá draky podle typu, barony, heraldy, voidgruby a první objektivy", () => {
+test("sčítá draky podle typu a barony; heraldy, voidgruby a Atakhana ignoruje", () => {
   const objectives = objectivesFromEvents(game([
     { EventID: 1, EventName: "HordeKill", EventTime: 300, KillerName: "Red Jungle", Stolen: "False" },
     { EventID: 2, EventName: "DragonKill", EventTime: 360, DragonType: "Fire", KillerName: "Blue Jungle", Stolen: "False" },
@@ -40,18 +42,15 @@ test("sčítá draky podle typu, barony, heraldy, voidgruby a první objektivy",
   assert.equal(objectives.teams.BLUE.dragons, 1);
   assert.equal(objectives.teams.BLUE.dragonTypes.fire, 1);
   assert.equal(objectives.teams.RED.dragonTypes.hextech, 1);
-  assert.equal(objectives.teams.RED.voidgrubs, 1);
-  assert.equal(objectives.teams.RED.heralds, 1);
   assert.equal(objectives.teams.RED.barons, 1);
-  assert.equal(objectives.teams.BLUE.atakhans, 1);
   assert.equal(objectives.firstDragon, "BLUE");
   assert.equal(objectives.firstBaron, "RED");
   assert.equal(objectives.timeline.find((kill) => kill.eventId === 4)?.stolen, true);
   // Timeline je seřazená podle herního času, ne podle pořadí v poli.
-  assert.deepEqual(objectives.timeline.map((kill) => kill.eventId), [1, 2, 3, 4, 6, 5]);
+  assert.deepEqual(objectives.timeline.map((kill) => kill.eventId), [2, 4, 5]);
 });
 
-test("věže a inhibitory se počítají straně, která budovu zbourala, i když zabil minion", () => {
+test("věže se počítají straně, která je zbourala, i když zabil minion; inhibitory se nesledují", () => {
   const objectives = objectivesFromEvents(game([
     { EventID: 1, EventName: "TurretKilled", EventTime: 600, TurretKilled: "Turret_T1_L_03_A", KillerName: "Minion_T2L0S0N0" },
     { EventID: 2, EventName: "TurretKilled", EventTime: 700, TurretKilled: "Turret_T2_R_03_A", KillerName: "Blue ADC" },
@@ -60,7 +59,7 @@ test("věže a inhibitory se počítají straně, která budovu zbourala, i kdy�
 
   assert.equal(objectives.teams.RED.towers, 1);
   assert.equal(objectives.teams.BLUE.towers, 1);
-  assert.equal(objectives.teams.RED.inhibitors, 1);
+  assert.equal(objectives.timeline.length, 2);
   assert.equal(objectives.firstTower, "RED");
 });
 
@@ -138,7 +137,7 @@ test("applyLiveEvents vrací jen objektivy, které přibyly od minula", () => {
   assert.deepEqual(next.map((kill) => kill.kind), ["baron"]);
 });
 
-test("záloha z LeagueBroadcastu: draci s typem, grub, herald, věže a inhibitory podle týmu", () => {
+test("LeagueBroadcast: draci s typem, baron a věže podle týmu", () => {
   const session = new GameSession(
     {
       localGameId: "TEST-3",
@@ -168,12 +167,11 @@ test("záloha z LeagueBroadcastu: draci s typem, grub, herald, věže a inhibito
   const objectives = session.objectives();
   assert.equal(objectives.teams.BLUE.dragonTypes.water, 1);
   assert.equal(objectives.teams.BLUE.dragons, 1, "spawn se nepočítá");
-  assert.equal(objectives.teams.BLUE.voidgrubs, 1);
-  assert.equal(objectives.teams.BLUE.heralds, 1);
+  assert.equal(objectives.teams.BLUE.dragons + objectives.teams.RED.dragons, 1, "grub ani herald se nepočítají");
   assert.equal(objectives.teams.RED.barons, 1);
   assert.equal(objectives.teams.BLUE.towers, 1);
   assert.equal(objectives.teams.RED.towers, 1);
-  assert.equal(objectives.teams.BLUE.inhibitors, 1);
+  assert.equal(objectives.timeline.filter((kill) => kill.kind === "tower").length, 2, "inhibitor se nepočítá");
   assert.equal(objectives.firstTower, "BLUE");
 
   // Jakmile objektivy hlásí Live API, má přednost a LeagueBroadcast se nepřičítá.
@@ -185,7 +183,7 @@ test("záloha z LeagueBroadcastu: draci s typem, grub, herald, věže a inhibito
   assert.equal(event("objective", 1600, { objective: "DRAGON_ELDER", eventType: "Kill", team: 1 }).length, 0);
 });
 
-test("spectator: budovy jako Turret_TOrder_…/Inhib_TChaos_… z Live API, draci z LeagueBroadcastu, bez zdvojení", () => {
+test("spectator: věže jako Turret_TOrder_… z Live API, draci z LeagueBroadcastu, bez zdvojení", () => {
   const session = new GameSession(
     {
       localGameId: "TEST-4",
@@ -219,7 +217,6 @@ test("spectator: budovy jako Turret_TOrder_…/Inhib_TChaos_… z Live API, drac
   const objectives = session.objectives();
   assert.equal(objectives.teams.BLUE.towers, 1);
   assert.equal(objectives.teams.RED.towers, 2);
-  assert.equal(objectives.teams.RED.inhibitors, 1);
   assert.equal(objectives.teams.RED.dragonTypes.air, 1);
   assert.equal(objectives.firstTower, "BLUE");
 
@@ -229,4 +226,63 @@ test("spectator: budovy jako Turret_TOrder_…/Inhib_TChaos_… z Live API, drac
     teamKills: { BLUE: 21, RED: 47 }, teamGold: { BLUE: null, RED: null }, patch: null,
   });
   assert.equal(session.suggestWinnerSide(), "RED");
+});
+
+function goldSnapshot(gameTime: number, gold: [number, number, number, number]): BroadcastGameSnapshot {
+  const player = (side: "BLUE" | "RED", slot: number, championName: string, value: number): LivePlayerState => ({
+    name: `${side}-${slot}`, side, championName, level: 10, kills: 0, deaths: 0, assists: 0,
+    cs: 100, gold: value, vision: 10, pentakills: 0, items: [], slot,
+  });
+  return {
+    capturedAt: new Date().toISOString(),
+    gameTime,
+    players: [
+      player("BLUE", 0, "Ornn", gold[0]),
+      player("BLUE", 1, "Vi", gold[1]),
+      player("RED", 0, "Gnar", gold[2]),
+      player("RED", 1, "Lee Sin", gold[3]),
+    ],
+    teamKills: { BLUE: 0, RED: 0 },
+    teamGold: { BLUE: gold[0] + gold[1], RED: gold[2] + gold[3] },
+    patch: null,
+  };
+}
+
+test("gold se vzorkuje jednou za 30 s herního času a na konci hry", () => {
+  const session = new GameSession(
+    { localGameId: "TEST-5", team1: "Blue", team2: "Red", gameNumber: 1, seriesFormat: "BO1", team1Side: "BLUE", createdAt: new Date().toISOString(), status: "WAITING_FOR_GAME" },
+    ".",
+  );
+  assert.ok(session.applyBroadcast(goldSnapshot(5, [500, 500, 500, 500])), "první vzorek hned");
+  assert.equal(session.applyBroadcast(goldSnapshot(20, [600, 600, 600, 600])), null, "stejný interval");
+  const sample = session.applyBroadcast(goldSnapshot(31, [900, 800, 700, 750]));
+  assert.ok(sample);
+  assert.equal(sample.diff, 250);
+  assert.deepEqual(sample.teams, { BLUE: 1700, RED: 1450 });
+  assert.equal(session.applyBroadcast(goldSnapshot(47, [1000, 900, 800, 800])), null);
+  const final = session.endGame();
+  assert.equal(final?.gameTime, 47, "závěrečný vzorek i uprostřed intervalu");
+  assert.equal(session.goldTimeline.length, 3);
+});
+
+test("rozdíl goldu hráče proti protivníkovi na stejné roli, i v 10. a 15. minutě", () => {
+  const session = new GameSession(
+    { localGameId: "TEST-6", team1: "Blue", team2: "Red", gameNumber: 1, seriesFormat: "BO1", team1Side: "BLUE", createdAt: new Date().toISOString(), status: "WAITING_FOR_GAME" },
+    ".",
+  );
+  session.applyBroadcast(goldSnapshot(599, [3000, 2800, 2600, 3100]));
+  session.applyBroadcast(goldSnapshot(900, [5000, 4000, 4500, 4600]));
+  session.applyBroadcast(goldSnapshot(1500, [9000, 7000, 8000, 8200]));
+  session.endGame();
+  const game = buildConfirmedGame(session.meta, session.finalSnapshot!, "Blue");
+
+  const top = game.players.find((player) => player.side === "BLUE" && player.slot === 0)!;
+  assert.equal(top.opponentChampion, "Gnar");
+  assert.equal(top.goldDiff, 1000);
+  assert.equal(top.goldDiffAt10, 400);
+  assert.equal(top.goldDiffAt15, 500);
+  const redJungle = game.players.find((player) => player.side === "RED" && player.slot === 1)!;
+  assert.equal(redJungle.goldDiff, 1200);
+  assert.equal(game.teams[0]?.goldDiff, -200);
+  assert.equal(game.goldTimeline.length, 3);
 });

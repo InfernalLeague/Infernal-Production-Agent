@@ -51,11 +51,13 @@ export function firstBlood(data: AllGameData): FirstBloodInfo | null {
 /** Normalizuje surová Live data na seznam interních stavů hráčů. */
 export function normalizePlayers(data: AllGameData): LivePlayerState[] {
   const pentas = pentakillsByPlayer(data);
+  const slots = { BLUE: 0, RED: 0 };
   return (data.allPlayers ?? []).map((p) => {
     const name = playerName(p);
+    const side = sideOf(p.team);
     return {
       name,
-      side: sideOf(p.team),
+      side,
       championName: p.championName,
       level: p.level,
       kills: p.scores.kills,
@@ -66,6 +68,7 @@ export function normalizePlayers(data: AllGameData): LivePlayerState[] {
       vision: Math.round(p.scores.wardScore), // wardScore = Vision Score (§23)
       pentakills: pentas.get(name) ?? 0,
       items: (p.items ?? []).map((it) => it.itemID),
+      slot: slots[side]++,
     };
   });
 }

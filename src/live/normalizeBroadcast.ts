@@ -8,6 +8,10 @@ import type {
 } from "@bluebottle_gg/league-broadcast-client";
 import type { BroadcastGameEvent, BroadcastGameSnapshot, LivePlayerState, Side } from "../types.js";
 
+function roundOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
+}
+
 function sideAt(index: number): Side {
   return index === 0 ? "BLUE" : "RED";
 }
@@ -20,7 +24,7 @@ export function normalizeBroadcastSnapshot(data: ingameFrontendData): BroadcastG
   const players: LivePlayerState[] = [];
   bottom.teams.slice(0, 2).forEach((team, teamIndex) => {
     const side = sideAt(teamIndex);
-    for (const player of team.players ?? []) {
+    (team.players ?? []).forEach((player, slot) => {
       players.push({
         name: player.displayName?.trim() || player.name?.trim() || player.champion?.name || "Unknown",
         side,
@@ -30,15 +34,17 @@ export function normalizeBroadcastSnapshot(data: ingameFrontendData): BroadcastG
         deaths: player.deaths ?? 0,
         assists: player.assists ?? 0,
         cs: player.creepScore ?? 0,
-        gold: player.totalGold ?? player.gold ?? null,
+        // Celé číslo: LeagueBroadcast posílá gold s desetinami (13293.067).
+        gold: roundOrNull(player.totalGold ?? player.gold),
         vision: Math.round(player.visionScore ?? 0),
         pentakills: 0,
         items: (player.items ?? [])
           .filter((item) => item.id > 0 && item.count !== 0)
           .sort((a, b) => a.slot - b.slot)
           .map((item) => item.id),
+        slot,
       });
-    }
+    });
   });
 
   const sums = { BLUE: 0, RED: 0 };
@@ -54,8 +60,8 @@ export function normalizeBroadcastSnapshot(data: ingameFrontendData): BroadcastG
       RED: scoreboard[1]?.kills ?? sums.RED,
     },
     teamGold: {
-      BLUE: scoreboard[0]?.gold ?? null,
-      RED: scoreboard[1]?.gold ?? null,
+      BLUE: roundOrNull(scoreboard[0]?.gold),
+      RED: roundOrNull(scoreboard[1]?.gold),
     },
     patch: data.patch ?? data.gameVersion ?? null,
   };

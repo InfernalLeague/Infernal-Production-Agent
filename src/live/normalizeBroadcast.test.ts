@@ -45,6 +45,7 @@ test("normalizuje KDA, CS, gold, itemy a herní čas z LeagueBroadcast snapshotu
     vision: 18,
     pentakills: 0,
     items: [3031, 3006],
+    slot: 0,
   });
 });
 

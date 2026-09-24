@@ -507,3 +507,8 @@ body[data-prod="twitch"] .brand-logo, body[data-prod="kick"] .brand-logo { filte
 
 /* Vítěz odhadnutý Agentem — operátor ho má před exportem zkontrolovat. */
 .winner-auto { color: var(--amber); letter-spacing: 0.08em; }
+
+/* Rozdíl goldu hráče proti protivníkovi na stejné roli. */
+.gdiff { display: block; font-size: 11px; font-weight: 700; color: var(--faint); }
+.gdiff.pos { color: var(--green); }
+.gdiff.neg { color: var(--red); }

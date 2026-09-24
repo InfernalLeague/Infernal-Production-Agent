@@ -7,6 +7,7 @@ import type {
   GameMeta,
   GameObjectives,
   GameStatus,
+  GoldSample,
   LivePlayerState,
   ObjectiveKill,
   ObjectiveKind,
@@ -28,6 +29,9 @@ import {
  * GameSession (workflow §45): drží stav JEDNÉ hry a její live data v paměti.
  * Sám nepolluje API ani nepíše na disk – to dělá GameManager.
  */
+/** Jak často (v sekundách herního času) se bere vzorek goldu. */
+export const GOLD_SAMPLE_SECONDS = 30;
+
 export class GameSession {
   meta: GameMeta;
   readonly folder: string;
@@ -40,6 +44,7 @@ export class GameSession {
     teamGold: { BLUE: number | null; RED: number | null };
     firstBlood: FirstBloodInfo | null;
     objectives: GameObjectives;
+    goldTimeline: GoldSample[];
   } | null = null;
 
   /**
@@ -69,6 +74,14 @@ export class GameSession {
 
   /** Poslední EventID z Live API zapsaný do riot_events.jsonl. */
   lastRiotEventId = -1;
+
+  /**
+   * Gold týmů a hráčů v průběhu hry, vzorek každých `GOLD_SAMPLE_SECONDS`
+   * herního času. Jen z LeagueBroadcastu — Live API gold hráčů nezná.
+   * Z týmových hodnot se na webu kreslí graf, z hráčských rozdíl proti
+   * protivníkovi na stejné roli (stejný `slot`).
+   */
+  goldTimeline: GoldSample[] = [];
 
   /** Live API v této hře vrátilo aspoň jeden event (čte se event stream). */
   private riotEventsSeen = false;
@@ -109,6 +122,7 @@ export class GameSession {
       teamGold: { BLUE: null, RED: null },
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
       objectives: this.objectives(),
+      goldTimeline: this.goldTimeline,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
@@ -116,7 +130,8 @@ export class GameSession {
   }
 
   /** LeagueBroadcast je primární bohatý zdroj (gold, itemy, rychlé změny). */
-  applyBroadcast(snapshot: BroadcastGameSnapshot): void {
+  /** Vrací nový vzorek goldu, pokud tímto snapshotem vznikl. */
+  applyBroadcast(snapshot: BroadcastGameSnapshot): GoldSample | null {
     this.broadcastSeen = true;
     const previousTime = this.currentLive?.durationSeconds ?? 0;
     this.currentLive = {
@@ -126,10 +141,48 @@ export class GameSession {
       teamGold: { ...snapshot.teamGold },
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
       objectives: this.objectives(),
+      goldTimeline: this.goldTimeline,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
     }
+    return this.sampleGold(false);
+  }
+
+  /**
+   * Vzorek goldu z aktuálního stavu. Bere se jednou za `GOLD_SAMPLE_SECONDS`
+   * herního času (první vzorek v prvním intervalu, kdy LeagueBroadcast gold
+   * posílá), `force` ho vezme hned — používá se na konci hry.
+   */
+  private sampleGold(force: boolean): GoldSample | null {
+    const live = this.currentLive;
+    if (!live || live.players.length === 0) return null;
+    if (live.players.some((player) => player.gold === null || player.slot === undefined)) return null;
+
+    const gameTime = live.durationSeconds;
+    const last = this.goldTimeline.at(-1);
+    if (last && gameTime <= last.gameTime) return null;
+    if (!force && last && Math.floor(gameTime / GOLD_SAMPLE_SECONDS) <= Math.floor(last.gameTime / GOLD_SAMPLE_SECONDS)) {
+      return null;
+    }
+
+    const sum = (side: "BLUE" | "RED") =>
+      live.players.filter((player) => player.side === side).reduce((total, player) => total + (player.gold ?? 0), 0);
+    const teams = { BLUE: live.teamGold.BLUE ?? sum("BLUE"), RED: live.teamGold.RED ?? sum("RED") };
+    const sample: GoldSample = {
+      gameTime,
+      teams,
+      diff: teams.BLUE - teams.RED,
+      players: live.players.map((player) => ({
+        side: player.side,
+        slot: player.slot ?? 0,
+        name: player.name,
+        championName: player.championName,
+        gold: player.gold ?? 0,
+      })),
+    };
+    this.goldTimeline.push(sample);
+    return sample;
   }
 
   /**
@@ -232,7 +285,9 @@ export class GameSession {
   }
 
   /** Konec hry (workflow §15–§16): zmrazí poslední validní live stav. */
-  endGame(): void {
+  /** Zmrazí stav a vrátí závěrečný vzorek goldu, pokud vznikl. */
+  endGame(): GoldSample | null {
+    const finalSample = this.sampleGold(true);
     if (this.currentLive) {
       this.finalSnapshot = {
         capturedAt: new Date().toISOString(),
@@ -244,9 +299,11 @@ export class GameSession {
           ? { ...this.currentLive.firstBlood }
           : null,
         objectives: structuredClone(this.currentLive.objectives),
+        goldTimeline: structuredClone(this.goldTimeline),
       };
     }
     this.meta.status = "GAME_ENDED";
+    return finalSample;
   }
 
   setWinner(name: string | null, source: "auto" | "manual" = "manual"): void {

@@ -37,12 +37,20 @@ musí být idempotentní a vrátit 2xx. `sequence` určuje pořadí zpráv v jed
 - `champion.kill` – vrah, oběť a asistující hráči,
 - `player.update` – K/D/A, nákup/prodej itemů a level-up,
 - `objective`, `team.update` – další LeagueBroadcast eventy (surový payload),
-- `objective.kill` – normalizovaný objektiv z Riot Live API: `kind`
-  (`dragon`, `baron`, `herald`, `voidgrub`, `atakhan`, `tower`, `inhibitor`),
+- `objective.kill` – normalizovaný objektiv: `kind` (`dragon`, `baron`, `tower`),
   `side` a `team`, `dragonType` (`fire`, `earth`, `water`, `air`, `hextech`,
-  `chemtech`, `elder`), `stolen`, `killer` a `eventId` z Live API,
-- `game.state` – K/D/A, CS, gold, itemy, level, vision, pentakilly, team kills/gold,
-  game time a `objectives` (součty za tým, dračí duše, první drak/baron/věž, timeline).
+  `chemtech`, `elder`), `stolen`, `killer` a `eventId`. Věže jsou z Riot Live API,
+  draci a baroni z LeagueBroadcastu (Live API je ve spectatoru nehlásí). Heraldi,
+  voidgrubi, inhibitory a Atakhan se zatím nesledují,
+- `gold.sample` – vzorek goldu každých 30 s herního času a na konci hry:
+  `gameTime`, `teams` (`BLUE`, `RED`), `diff` (modří − červení) a `players`
+  (`side`, `slot`, `name`, `championName`, `gold`). `slot` je pořadí v týmu
+  z LeagueBroadcastu = role (0 top, 1 jungle, 2 mid, 3 bot, 4 support); protivník
+  na stejné roli má stejný `slot` na druhé straně. Z týmových hodnot jde graf,
+  z hráčských rozdíl proti protivníkovi,
+- `game.state` – K/D/A, CS, gold (celá čísla), itemy, level, vision, pentakilly,
+  `slot`, team kills/gold, game time a `objectives` (součty za tým, dračí duše,
+  první drak/baron/věž, timeline).
 
 Objektivy a pentakilly se berou z event streamu Riot Live API i ve chvíli, kdy
 statistiky hráčů dodává LeagueBroadcast. Pentakill se k hráči páruje přes stranu

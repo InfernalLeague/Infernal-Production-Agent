@@ -9,6 +9,7 @@ import type {
   CreateGameInput,
   FinalLiveSnapshot,
   GameMeta,
+  GoldSample,
   LiveTransportSource,
   ObjectiveKill,
   Side,
@@ -154,7 +155,7 @@ export class GameManager extends EventEmitter {
     const s = this.session;
     if (!s || (s.status !== "CREATED" && s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
     const wasWaiting = s.status !== "LIVE";
-    s.applyBroadcast(snapshot);
+    const goldSample = s.applyBroadcast(snapshot);
     if (wasWaiting) log.info(`${s.meta.localGameId}: LeagueBroadcast detekoval hru → LIVE`);
     this.publisher.publishSnapshot(
       {
@@ -165,7 +166,25 @@ export class GameManager extends EventEmitter {
       },
       "league-broadcast",
     );
+    if (goldSample) this.publishGoldSample(goldSample);
     this.emitUpdate();
+  }
+
+  /**
+   * Vzorek goldu jako samostatná zpráva živého streamu. Web z nich skládá
+   * graf rozdílu týmů a rozdíly hráčů proti protivníkovi na stejné roli,
+   * aniž by musel procházet každý `game.state` snapshot.
+   */
+  private publishGoldSample(sample: GoldSample): void {
+    this.publisher.publishEvent(
+      {
+        type: "gold.sample",
+        capturedAt: new Date().toISOString(),
+        gameTime: sample.gameTime,
+        payload: { ...sample },
+      },
+      "league-broadcast",
+    );
   }
 
   private onBroadcastEvent(event: BroadcastGameEvent): void {
@@ -305,7 +324,8 @@ export class GameManager extends EventEmitter {
 
   private endCurrentGame(reason: string): void {
     if (!this.session) return;
-    this.session.endGame();
+    const finalGold = this.session.endGame();
+    if (finalGold) this.publishGoldSample(finalGold);
     log.info(`${this.session.meta.localGameId}: GAME ENDED (${reason})`);
     this.suggestWinner(this.session);
     if (this.session.finalSnapshot) {
@@ -387,6 +407,7 @@ export class GameManager extends EventEmitter {
       teamGold: s.currentLive.teamGold,
       firstBlood: s.currentLive.firstBlood,
       objectives: s.currentLive.objectives,
+      goldTimeline: s.currentLive.goldTimeline,
     };
   }
 

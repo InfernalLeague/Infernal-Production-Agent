@@ -41,16 +41,13 @@ export class TxtExporter {
       L.push(`side=${t.side}`);
       L.push(`kills=${num(t.kills)}`);
       L.push(`gold=${num(t.gold)}`);
+      L.push(`gold_diff=${num(t.goldDiff)}`);
       const o = t.objectives;
       L.push(`dragons=${o.dragons}`);
       for (const [type, count] of Object.entries(o.dragonTypes)) L.push(`dragon_${type}=${count}`);
       L.push(`dragon_soul=${o.dragonSoul ?? ""}`);
       L.push(`barons=${o.barons}`);
-      L.push(`heralds=${o.heralds}`);
-      L.push(`voidgrubs=${o.voidgrubs}`);
-      L.push(`atakhans=${o.atakhans}`);
       L.push(`towers=${o.towers}`);
-      L.push(`inhibitors=${o.inhibitors}`);
       L.push("");
     });
 
@@ -61,6 +58,15 @@ export class TxtExporter {
         L.push(
           `${formatDuration(kill.gameTime)};${kill.kind};${kill.dragonType ?? ""};${kill.team};${kill.stolen ? "stolen" : ""}`,
         );
+      });
+      L.push("");
+    }
+
+    if (game.goldTimeline.length > 0) {
+      L.push("GOLD");
+      // čas;gold modrých;gold červených;rozdíl (modří − červení)
+      game.goldTimeline.forEach((sample) => {
+        L.push(`${formatDuration(sample.gameTime)};${sample.teams.BLUE};${sample.teams.RED};${sample.diff}`);
       });
       L.push("");
     }
@@ -89,6 +95,11 @@ export class TxtExporter {
     this.stat(out, "damage", p.damage, p.sources.damage);
     this.stat(out, "gold", p.gold, p.sources.gold);
     this.stat(out, "gold_per_minute", p.goldPerMinute, p.sources.goldPerMinute);
+    out.push(`slot=${num(p.slot)}`);
+    out.push(`opponent=${p.opponentChampion ?? ""}`);
+    out.push(`gold_diff=${num(p.goldDiff)}`);
+    out.push(`gold_diff_at_10=${num(p.goldDiffAt10)}`);
+    out.push(`gold_diff_at_15=${num(p.goldDiffAt15)}`);
     out.push(`pentakills=${p.pentakills}`);
     out.push(`items=${p.items.join(";")}`);
     return out;
