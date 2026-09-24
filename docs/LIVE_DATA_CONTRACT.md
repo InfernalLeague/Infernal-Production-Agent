@@ -42,12 +42,13 @@ musí být idempotentní a vrátit 2xx. `sequence` určuje pořadí zpráv v jed
   `chemtech`, `elder`), `stolen`, `killer` a `eventId`. Věže jsou z Riot Live API,
   draci a baroni z LeagueBroadcastu (Live API je ve spectatoru nehlásí). Heraldi,
   voidgrubi, inhibitory a Atakhan se zatím nesledují,
-- `gold.sample` – vzorek goldu každých 30 s herního času a na konci hry:
-  `gameTime`, `teams` (`BLUE`, `RED`), `diff` (modří − červení) a `players`
-  (`side`, `slot`, `name`, `championName`, `gold`). `slot` je pořadí v týmu
-  z LeagueBroadcastu = role (0 top, 1 jungle, 2 mid, 3 bot, 4 support); protivník
-  na stejné roli má stejný `slot` na druhé straně. Z týmových hodnot jde graf,
-  z hráčských rozdíl proti protivníkovi,
+- `gold.sample` – gold týmů každých 30 s herního času a na konci hry:
+  `gameTime`, `teams` (`BLUE`, `RED`) a `diff` (modří − červení). Z nich jde graf,
+- `gold.lane14` – jednou za hru, ve 14. minutě: `gameTime` a `players` (`side`,
+  `slot`, `name`, `championName`, `gold`, `opponentChampion`, `goldDiff`). `slot`
+  je pořadí v týmu z LeagueBroadcastu = role (0 top, 1 jungle, 2 mid, 3 bot,
+  4 support); protivník na stejné roli má stejný `slot` na druhé straně.
+  Když Agent naběhne až po 15. minutě, zpráva nepřijde,
 - `game.state` – K/D/A, CS, gold (celá čísla), itemy, level, vision, pentakilly,
   `slot`, team kills/gold, game time a `objectives` (součty za tým, dračí duše,
   první drak/baron/věž, timeline).

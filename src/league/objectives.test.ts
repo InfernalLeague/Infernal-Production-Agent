@@ -248,41 +248,53 @@ function goldSnapshot(gameTime: number, gold: [number, number, number, number]):
   };
 }
 
-test("gold se vzorkuje jednou za 30 s herního času a na konci hry", () => {
+test("gold týmů se vzorkuje jednou za 30 s herního času a na konci hry", () => {
   const session = new GameSession(
     { localGameId: "TEST-5", team1: "Blue", team2: "Red", gameNumber: 1, seriesFormat: "BO1", team1Side: "BLUE", createdAt: new Date().toISOString(), status: "WAITING_FOR_GAME" },
     ".",
   );
-  assert.ok(session.applyBroadcast(goldSnapshot(5, [500, 500, 500, 500])), "první vzorek hned");
-  assert.equal(session.applyBroadcast(goldSnapshot(20, [600, 600, 600, 600])), null, "stejný interval");
-  const sample = session.applyBroadcast(goldSnapshot(31, [900, 800, 700, 750]));
+  assert.ok(session.applyBroadcast(goldSnapshot(5, [500, 500, 500, 500])).goldSample, "první vzorek hned");
+  assert.equal(session.applyBroadcast(goldSnapshot(20, [600, 600, 600, 600])).goldSample, null, "stejný interval");
+  const sample = session.applyBroadcast(goldSnapshot(31, [900, 800, 700, 750])).goldSample;
   assert.ok(sample);
   assert.equal(sample.diff, 250);
   assert.deepEqual(sample.teams, { BLUE: 1700, RED: 1450 });
-  assert.equal(session.applyBroadcast(goldSnapshot(47, [1000, 900, 800, 800])), null);
+  assert.equal("players" in sample, false, "hráči ve vzorku nejsou");
+  assert.equal(session.applyBroadcast(goldSnapshot(47, [1000, 900, 800, 800])).goldSample, null);
   const final = session.endGame();
   assert.equal(final?.gameTime, 47, "závěrečný vzorek i uprostřed intervalu");
   assert.equal(session.goldTimeline.length, 3);
 });
 
-test("rozdíl goldu hráče proti protivníkovi na stejné roli, i v 10. a 15. minutě", () => {
+test("gold hráčů se čte jen jednou, ve 14. minutě, s rozdílem proti protivníkovi na stejné roli", () => {
   const session = new GameSession(
     { localGameId: "TEST-6", team1: "Blue", team2: "Red", gameNumber: 1, seriesFormat: "BO1", team1Side: "BLUE", createdAt: new Date().toISOString(), status: "WAITING_FOR_GAME" },
     ".",
   );
-  session.applyBroadcast(goldSnapshot(599, [3000, 2800, 2600, 3100]));
-  session.applyBroadcast(goldSnapshot(900, [5000, 4000, 4500, 4600]));
+  assert.equal(session.applyBroadcast(goldSnapshot(830, [4000, 3500, 3700, 3600])).laneGold, null, "před 14:00 ne");
+  const lane = session.applyBroadcast(goldSnapshot(841, [4200, 3600, 3700, 3900])).laneGold;
+  assert.ok(lane);
+  assert.equal(session.applyBroadcast(goldSnapshot(871, [4500, 3700, 3800, 4000])).laneGold, null, "jen jednou");
   session.applyBroadcast(goldSnapshot(1500, [9000, 7000, 8000, 8200]));
   session.endGame();
   const game = buildConfirmedGame(session.meta, session.finalSnapshot!, "Blue");
 
   const top = game.players.find((player) => player.side === "BLUE" && player.slot === 0)!;
   assert.equal(top.opponentChampion, "Gnar");
-  assert.equal(top.goldDiff, 1000);
-  assert.equal(top.goldDiffAt10, 400);
-  assert.equal(top.goldDiffAt15, 500);
+  assert.equal(top.goldDiffAt14, 500);
   const redJungle = game.players.find((player) => player.side === "RED" && player.slot === 1)!;
-  assert.equal(redJungle.goldDiff, 1200);
+  assert.equal(redJungle.goldDiffAt14, 300);
+  assert.equal(game.laneGoldAt14?.gameTime, 841);
   assert.equal(game.teams[0]?.goldDiff, -200);
-  assert.equal(game.goldTimeline.length, 3);
+});
+
+test("když Agent naběhne až po 15. minutě, gold hráčů ve 14. minutě zůstane prázdný", () => {
+  const session = new GameSession(
+    { localGameId: "TEST-7", team1: "Blue", team2: "Red", gameNumber: 1, seriesFormat: "BO1", team1Side: "BLUE", createdAt: new Date().toISOString(), status: "WAITING_FOR_GAME" },
+    ".",
+  );
+  assert.equal(session.applyBroadcast(goldSnapshot(960, [5000, 4000, 4500, 4600])).laneGold, null);
+  session.endGame();
+  const game = buildConfirmedGame(session.meta, session.finalSnapshot!, null);
+  assert.equal(game.players[0]?.goldDiffAt14, null);
 });

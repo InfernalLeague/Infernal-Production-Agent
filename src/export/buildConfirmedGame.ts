@@ -4,7 +4,6 @@ import type {
   ConfirmedTeam,
   FinalLiveSnapshot,
   GameMeta,
-  GoldSample,
   Side,
 } from "../types.js";
 import { emptyObjectives } from "../league/objectives.js";
@@ -16,9 +15,8 @@ import { emptyObjectives } from "../league/objectives.js";
  * Gold je dostupný z LeagueBroadcastu, při Riot API fallbacku zůstává null.
  * Vision a ostatní dostupné statistiky mají zdroj "live".
  *
- * Rozdíly goldu hráčů jsou proti protivníkovi na stejné roli, tedy se
- * stejným `slot` na druhé straně. V 10. a 15. minutě se berou z posledního
- * vzorku goldu, který v tu chvíli existoval.
+ * Rozdíl goldu hráče je proti protivníkovi na stejné roli (stejný `slot`
+ * na druhé straně) a bere se jen ve 14. minutě.
  */
 export function buildConfirmedGame(
   meta: GameMeta,
@@ -34,6 +32,7 @@ export function buildConfirmedGame(
   // Recovery snapshot ze starší verze objektivy ani gold v čase nemá.
   const objectives = snapshot.objectives ?? emptyObjectives();
   const goldTimeline = snapshot.goldTimeline ?? [];
+  const laneGoldAt14 = snapshot.laneGoldAt14 ?? null;
   const teamOrNull = (side: Side | null): string | null => (side ? teamNameOf(side) : null);
 
   const teams: ConfirmedTeam[] = (["BLUE", "RED"] as Side[]).map((side) => {
@@ -71,9 +70,8 @@ export function buildConfirmedGame(
       items: p.items,
       slot,
       opponentChampion: opponent?.championName ?? null,
-      goldDiff: p.gold !== null && opponent?.gold != null ? p.gold - opponent.gold : null,
-      goldDiffAt10: slot === null ? null : laneGoldDiffAt(goldTimeline, 600, p.side, slot),
-      goldDiffAt15: slot === null ? null : laneGoldDiffAt(goldTimeline, 900, p.side, slot),
+      goldDiffAt14:
+        laneGoldAt14?.players.find((lane) => lane.side === p.side && lane.slot === slot)?.goldDiff ?? null,
       sources: {
         kills: "live",
         deaths: "live",
@@ -110,19 +108,8 @@ export function buildConfirmedGame(
     teams,
     players,
     goldTimeline,
+    laneGoldAt14,
     objectiveTimeline: objectives.timeline.map((kill) => ({ ...kill, team: teamNameOf(kill.side) })),
   };
 }
 
-/**
- * Rozdíl goldu hráče proti protivníkovi na stejné roli v daném herním čase.
- * Bere poslední vzorek nejpozději v tom čase a nejdřív minutu před ním —
- * starší vzorek (třeba když Agent naběhl až uprostřed hry) by nic neříkal.
- */
-export function laneGoldDiffAt(timeline: GoldSample[], gameTime: number, side: Side, slot: number): number | null {
-  const sample = [...timeline].reverse().find((s) => s.gameTime <= gameTime && s.gameTime >= gameTime - 60);
-  if (!sample) return null;
-  const own = sample.players.find((p) => p.side === side && p.slot === slot);
-  const enemy = sample.players.find((p) => p.side !== side && p.slot === slot);
-  return own && enemy ? own.gold - enemy.gold : null;
-}

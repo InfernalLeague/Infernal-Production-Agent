@@ -212,8 +212,9 @@ function render(s) {
   } else {
     fbEl.hidden = true;
   }
-  renderRows("blueRows", players.filter((p) => p.side === "BLUE"), players);
-  renderRows("redRows", players.filter((p) => p.side === "RED"), players);
+  const lane14 = live ? live.laneGoldAt14 : (sess.finalSnapshot ? sess.finalSnapshot.laneGoldAt14 : null);
+  renderRows("blueRows", players.filter((p) => p.side === "BLUE"), lane14);
+  renderRows("redRows", players.filter((p) => p.side === "RED"), lane14);
 
   // export tlačítko aktivní, jakmile máme data
   $("exportBtn").disabled = players.length === 0;
@@ -258,7 +259,7 @@ function renderWinner(m, winner) {
   [...seg.children].forEach((b) => b.classList.toggle("active", b.dataset.team === currentWinner));
 }
 
-function renderRows(tbodyId, players, all) {
+function renderRows(tbodyId, players, lane14) {
   const tb = $(tbodyId);
   tb.innerHTML = "";
   for (const p of players) {
@@ -274,7 +275,7 @@ function renderRows(tbodyId, players, all) {
       `<td class="p-cell"><div class="p-wrap">${ava}<span class="p-id"><span class="p-name">${esc(p.name)}</span><span class="p-champ">${esc(p.championName)}</span></span></div></td>` +
       `<td class="c-lvl">${p.level}</td>` +
       `<td class="c-kda"><b>${p.kills}</b><span class="sep">/</span><span class="d">${p.deaths}</span><span class="sep">/</span><b>${p.assists}</b></td>` +
-      `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}${laneDiff(p, all)}</td>` +
+      `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}${laneDiff(p, lane14)}</td>` +
       `<td><span class="item-list">${items || "—"}</span></td>`;
     tb.appendChild(tr);
   }
@@ -296,13 +297,13 @@ function fmtDiff(diff) {
   const n = Math.round(diff);
   return (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n).toLocaleString("cs-CZ");
 }
-/** Rozdíl goldu proti protivníkovi na stejné roli (stejné pořadí v týmu). */
-function laneDiff(p, all) {
-  if (p.gold == null || p.slot == null || !all) return "";
-  const opp = all.find((o) => o.side !== p.side && o.slot === p.slot);
-  if (!opp || opp.gold == null) return "";
-  const d = p.gold - opp.gold;
-  return `<span class="gdiff ${d > 0 ? "pos" : d < 0 ? "neg" : ""}">${fmtDiff(d)}</span>`;
+/** Rozdíl goldu proti protivníkovi na stejné roli ve 14. minutě (jakmile je zaznamenaný). */
+function laneDiff(p, lane14) {
+  if (!lane14 || p.slot == null) return "";
+  const row = lane14.players.find((l) => l.side === p.side && l.slot === p.slot);
+  if (!row || row.goldDiff == null) return "";
+  const d = row.goldDiff;
+  return `<span class="gdiff ${d > 0 ? "pos" : d < 0 ? "neg" : ""}" title="Rozdíl goldu proti protivníkovi na stejné roli ve 14. minutě">@14 ${fmtDiff(d)}</span>`;
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 

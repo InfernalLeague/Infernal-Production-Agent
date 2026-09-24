@@ -101,10 +101,10 @@ osou (`čas;objektiv;typ;tým;stolen`). Věže jdou z Riot Live API, draci a bar
 z LeagueBroadcastu.
 
 Gold je v celých číslech. Sekce `GOLD` má vzorek každých 30 s herního času
-(`čas;modří;červení;rozdíl`), hráči mají `slot` (role podle pořadí v týmu),
-`opponent` a rozdíl goldu proti protivníkovi na stejné roli na konci hry,
-v 10. a v 15. minutě (`gold_diff`, `gold_diff_at_10`, `gold_diff_at_15`).
-V `confirmed.json` je celá časová osa goldu včetně hráčů (`goldTimeline`).
+(`čas;modří;červení;rozdíl`). Hráči mají `slot` (role podle pořadí v týmu),
+`opponent` a rozdíl goldu proti protivníkovi na stejné roli ve 14. minutě
+(`gold_diff_at_14`). V `confirmed.json` je časová osa goldu týmů (`goldTimeline`)
+a gold hráčů ve 14. minutě (`laneGoldAt14`).
 
 `data/current_game/live_snapshot.json` je recovery snapshot (každých 5 s při LIVE).
 

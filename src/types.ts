@@ -94,10 +94,8 @@ export interface ConfirmedPlayer {
   slot: number | null;
   /** Champion protivníka na stejné roli (stejný slot na druhé straně). */
   opponentChampion: string | null;
-  /** Gold hráče minus gold protivníka na stejné roli: na konci, v 10. a 15. minutě. */
-  goldDiff: number | null;
-  goldDiffAt10: number | null;
-  goldDiffAt15: number | null;
+  /** Gold hráče minus gold protivníka na stejné roli ve 14. minutě. */
+  goldDiffAt14: number | null;
 
   sources: {
     kills: ValueSource;
@@ -160,29 +158,37 @@ export interface TeamObjectives {
 // Gold v průběhu hry (vzorky z LeagueBroadcastu)
 // ---------------------------------------------------------------------------
 
-/**
- * Gold jednoho hráče ve vzorku.
- *
- * `slot` je pořadí hráče v týmu, jak ho posílá LeagueBroadcast — odpovídá
- * rolím (0 top, 1 jungle, 2 mid, 3 bot, 4 support). Protivník na stejné
- * roli má stejný `slot` na druhé straně. Champion je u vzorku proto, aby
- * web mohl roli ověřit proti přiřazení z Champion Draftu.
- */
-export interface GoldSamplePlayer {
-  side: Side;
-  slot: number;
-  name: string;
-  championName: string;
-  gold: number;
-}
-
-/** Jeden vzorek goldu (standardně každých 30 s herního času). */
+/** Jeden vzorek goldu týmů (každých 30 s herního času a na konci hry). */
 export interface GoldSample {
   gameTime: number;
   teams: { BLUE: number; RED: number };
   /** BLUE − RED; kladné = vede modrá. */
   diff: number;
-  players: GoldSamplePlayer[];
+}
+
+/**
+ * Gold hráče ve 14. minutě a rozdíl proti protivníkovi na stejné roli.
+ *
+ * `slot` je pořadí hráče v týmu, jak ho posílá LeagueBroadcast — odpovídá
+ * rolím (0 top, 1 jungle, 2 mid, 3 bot, 4 support). Protivník na stejné
+ * roli má stejný `slot` na druhé straně. Champion je tu proto, aby web
+ * mohl roli ověřit proti přiřazení z Champion Draftu.
+ */
+export interface LaneGoldPlayer {
+  side: Side;
+  slot: number;
+  name: string;
+  championName: string;
+  gold: number;
+  opponentChampion: string | null;
+  /** Gold hráče minus gold protivníka na stejné roli. */
+  goldDiff: number | null;
+}
+
+/** Jednorázový záznam goldu hráčů ve 14. minutě hry. */
+export interface LaneGoldAt14 {
+  gameTime: number;
+  players: LaneGoldPlayer[];
 }
 
 export interface GameObjectives {
@@ -221,8 +227,10 @@ export interface ConfirmedGame {
   };
   teams: ConfirmedTeam[];
   players: ConfirmedPlayer[];
-  /** Gold týmů i hráčů v průběhu hry (vzorky po 30 s herního času). */
+  /** Gold týmů v průběhu hry (vzorky po 30 s herního času). */
   goldTimeline: GoldSample[];
+  /** Gold hráčů a rozdíl proti protivníkovi ve 14. minutě. */
+  laneGoldAt14: LaneGoldAt14 | null;
   /** Objektivy v pořadí, jak padly (strana → název týmu). */
   objectiveTimeline: Array<ObjectiveKill & { team: string }>;
 }
@@ -296,6 +304,7 @@ export interface FinalLiveSnapshot {
   firstBlood: FirstBloodInfo | null;
   objectives: GameObjectives;
   goldTimeline: GoldSample[];
+  laneGoldAt14: LaneGoldAt14 | null;
 }
 
 /** Normalizovaný stav jednoho hráče z Live dat. */
@@ -350,7 +359,7 @@ export interface BroadcastGameSnapshot {
 }
 
 export interface BroadcastGameEvent {
-  type: "champion.kill" | "player.update" | "objective" | "team.update" | "objective.kill" | "gold.sample";
+  type: "champion.kill" | "player.update" | "objective" | "team.update" | "objective.kill" | "gold.sample" | "gold.lane14";
   capturedAt: string;
   gameTime: number | null;
   payload: Record<string, unknown>;

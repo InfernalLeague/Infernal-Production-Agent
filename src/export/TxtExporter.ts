@@ -97,9 +97,7 @@ export class TxtExporter {
     this.stat(out, "gold_per_minute", p.goldPerMinute, p.sources.goldPerMinute);
     out.push(`slot=${num(p.slot)}`);
     out.push(`opponent=${p.opponentChampion ?? ""}`);
-    out.push(`gold_diff=${num(p.goldDiff)}`);
-    out.push(`gold_diff_at_10=${num(p.goldDiffAt10)}`);
-    out.push(`gold_diff_at_15=${num(p.goldDiffAt15)}`);
+    out.push(`gold_diff_at_14=${num(p.goldDiffAt14)}`);
     out.push(`pentakills=${p.pentakills}`);
     out.push(`items=${p.items.join(";")}`);
     return out;

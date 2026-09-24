@@ -155,7 +155,7 @@ export class GameManager extends EventEmitter {
     const s = this.session;
     if (!s || (s.status !== "CREATED" && s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
     const wasWaiting = s.status !== "LIVE";
-    const goldSample = s.applyBroadcast(snapshot);
+    const { goldSample, laneGold } = s.applyBroadcast(snapshot);
     if (wasWaiting) log.info(`${s.meta.localGameId}: LeagueBroadcast detekoval hru → LIVE`);
     this.publisher.publishSnapshot(
       {
@@ -167,13 +167,19 @@ export class GameManager extends EventEmitter {
       "league-broadcast",
     );
     if (goldSample) this.publishGoldSample(goldSample);
+    if (laneGold) {
+      this.publisher.publishEvent(
+        { type: "gold.lane14", capturedAt: new Date().toISOString(), gameTime: laneGold.gameTime, payload: { ...laneGold } },
+        "league-broadcast",
+      );
+      log.info(`${s.meta.localGameId}: gold hráčů ve 14. minutě zaznamenán`);
+    }
     this.emitUpdate();
   }
 
   /**
-   * Vzorek goldu jako samostatná zpráva živého streamu. Web z nich skládá
-   * graf rozdílu týmů a rozdíly hráčů proti protivníkovi na stejné roli,
-   * aniž by musel procházet každý `game.state` snapshot.
+   * Vzorek goldu týmů jako samostatná zpráva živého streamu. Web z nich
+   * skládá graf, aniž by musel procházet každý `game.state` snapshot.
    */
   private publishGoldSample(sample: GoldSample): void {
     this.publisher.publishEvent(
@@ -408,6 +414,7 @@ export class GameManager extends EventEmitter {
       firstBlood: s.currentLive.firstBlood,
       objectives: s.currentLive.objectives,
       goldTimeline: s.currentLive.goldTimeline,
+      laneGoldAt14: s.currentLive.laneGoldAt14,
     };
   }
 

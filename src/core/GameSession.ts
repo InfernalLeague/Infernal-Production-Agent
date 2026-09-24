@@ -8,6 +8,7 @@ import type {
   GameObjectives,
   GameStatus,
   GoldSample,
+  LaneGoldAt14,
   LivePlayerState,
   ObjectiveKill,
   ObjectiveKind,
@@ -32,6 +33,9 @@ import {
 /** Jak často (v sekundách herního času) se bere vzorek goldu. */
 export const GOLD_SAMPLE_SECONDS = 30;
 
+/** Herní čas, ve kterém se čte gold hráčů (14:00). */
+export const LANE_GOLD_AT = 14 * 60;
+
 export class GameSession {
   meta: GameMeta;
   readonly folder: string;
@@ -45,6 +49,7 @@ export class GameSession {
     firstBlood: FirstBloodInfo | null;
     objectives: GameObjectives;
     goldTimeline: GoldSample[];
+    laneGoldAt14: LaneGoldAt14 | null;
   } | null = null;
 
   /**
@@ -82,6 +87,12 @@ export class GameSession {
    * protivníkovi na stejné roli (stejný `slot`).
    */
   goldTimeline: GoldSample[] = [];
+
+  /**
+   * Gold hráčů ve 14. minutě. U hráčů se bere jen tenhle jeden okamžik —
+   * rozdíl proti protivníkovi na stejné roli (rozhodnutí 24. 9. 2026).
+   */
+  laneGoldAt14: LaneGoldAt14 | null = null;
 
   /** Live API v této hře vrátilo aspoň jeden event (čte se event stream). */
   private riotEventsSeen = false;
@@ -123,6 +134,7 @@ export class GameSession {
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
       objectives: this.objectives(),
       goldTimeline: this.goldTimeline,
+      laneGoldAt14: this.laneGoldAt14,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
@@ -130,8 +142,8 @@ export class GameSession {
   }
 
   /** LeagueBroadcast je primární bohatý zdroj (gold, itemy, rychlé změny). */
-  /** Vrací nový vzorek goldu, pokud tímto snapshotem vznikl. */
-  applyBroadcast(snapshot: BroadcastGameSnapshot): GoldSample | null {
+  /** Vrací nový vzorek goldu týmů a záznam goldu hráčů ve 14. minutě, pokud tímto snapshotem vznikly. */
+  applyBroadcast(snapshot: BroadcastGameSnapshot): { goldSample: GoldSample | null; laneGold: LaneGoldAt14 | null } {
     this.broadcastSeen = true;
     const previousTime = this.currentLive?.durationSeconds ?? 0;
     this.currentLive = {
@@ -142,11 +154,44 @@ export class GameSession {
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
       objectives: this.objectives(),
       goldTimeline: this.goldTimeline,
+      laneGoldAt14: this.laneGoldAt14,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
     }
-    return this.sampleGold(false);
+    return { goldSample: this.sampleGold(false), laneGold: this.captureLaneGold() };
+  }
+
+  /**
+   * Gold hráčů ve 14. minutě, jednou za hru. Bere se první snapshot se
+   * všemi goldy v intervalu 14:00–15:00; když Agent naběhne později,
+   * hodnota zůstane prázdná — pozdější gold by už o 14. minutě nic neříkal.
+   */
+  private captureLaneGold(): LaneGoldAt14 | null {
+    const live = this.currentLive;
+    if (this.laneGoldAt14 || !live) return null;
+    const gameTime = live.durationSeconds;
+    if (gameTime < LANE_GOLD_AT || gameTime >= LANE_GOLD_AT + 60) return null;
+    if (live.players.length === 0) return null;
+    if (live.players.some((player) => player.gold === null || player.slot === undefined)) return null;
+
+    this.laneGoldAt14 = {
+      gameTime,
+      players: live.players.map((player) => {
+        const opponent = live.players.find((o) => o.side !== player.side && o.slot === player.slot);
+        return {
+          side: player.side,
+          slot: player.slot ?? 0,
+          name: player.name,
+          championName: player.championName,
+          gold: player.gold ?? 0,
+          opponentChampion: opponent?.championName ?? null,
+          goldDiff: opponent?.gold != null && player.gold !== null ? player.gold - opponent.gold : null,
+        };
+      }),
+    };
+    live.laneGoldAt14 = this.laneGoldAt14;
+    return this.laneGoldAt14;
   }
 
   /**
@@ -173,13 +218,6 @@ export class GameSession {
       gameTime,
       teams,
       diff: teams.BLUE - teams.RED,
-      players: live.players.map((player) => ({
-        side: player.side,
-        slot: player.slot ?? 0,
-        name: player.name,
-        championName: player.championName,
-        gold: player.gold ?? 0,
-      })),
     };
     this.goldTimeline.push(sample);
     return sample;
@@ -300,6 +338,7 @@ export class GameSession {
           : null,
         objectives: structuredClone(this.currentLive.objectives),
         goldTimeline: structuredClone(this.goldTimeline),
+        laneGoldAt14: structuredClone(this.laneGoldAt14),
       };
     }
     this.meta.status = "GAME_ENDED";
