@@ -420,7 +420,7 @@ if (window.electronAPI && window.electronAPI.onUpdate) {
       install.disabled = true;
     } else if (u.state === "downloaded") {
       title.textContent = `Verze ${u.version} je připravená`;
-      body.textContent = "Aktualizace je stažená. Restartuj aplikaci pro dokončení instalace.";
+      body.textContent = "Aktualizace je stažená. Tlačítkem se aplikace zavře, sama se aktualizuje a za pár sekund se znovu otevře — bez průvodce instalací.";
       install.disabled = false;
     }
   });

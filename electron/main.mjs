@@ -91,7 +91,12 @@ ipcMain.handle("app:getVersion", () => app.getVersion());
 ipcMain.on("update:request", (e) => e.sender.send("update:status", updateStatus));
 ipcMain.on("update:install", () => {
   try {
-    autoUpdater.quitAndInstall();
+    // Tichá instalace (isSilent) a znovuspuštění po ní (isForceRunAfter).
+    // Bez parametrů by se kvůli nsis.oneClick: false otevřel celý průvodce
+    // instalací jako při prvním instalování. Při aktualizaci NSIS dostane
+    // --updated a vezme si složku z předchozí instalace, takže se na nic
+    // ptát nemusí.
+    autoUpdater.quitAndInstall(true, true);
   } catch (err) {
     console.error("[updater] quitAndInstall selhal:", err?.message ?? err);
   }
