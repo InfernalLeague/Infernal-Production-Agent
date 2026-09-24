@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AllGameData, RiotEvent, RiotPlayer } from "../types.js";
 import { GameSession } from "../core/GameSession.js";
-import { championKey, objectivesFromEvents, pentakillsByChampion } from "./objectives.js";
+import { championKey, objectivesFromEvents, pentakillsByChampion, soloKillsByChampion } from "./objectives.js";
 import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
 import type { BroadcastGameSnapshot, LivePlayerState } from "../types.js";
 
@@ -102,7 +102,7 @@ test("pentakill se páruje přes championa, takže sedí i na jména z LeagueBro
     gameTime: 1600,
     players: [{
       name: "RedADC#EUW", side: "RED", championName: "Kai'Sa", level: 16,
-      kills: 9, deaths: 1, assists: 3, cs: 250, gold: 14000, vision: 20, pentakills: 0, items: [],
+      kills: 9, deaths: 1, assists: 3, cs: 250, gold: 14000, vision: 20, pentakills: 0, soloKills: 0, items: [],
     }],
     teamKills: { BLUE: 3, RED: 9 },
     teamGold: { BLUE: null, RED: null },
@@ -235,7 +235,7 @@ test("spectator: věže jako Turret_TOrder_… z Live API, draci z LeagueBroadca
 function goldSnapshot(gameTime: number, gold: [number, number, number, number]): BroadcastGameSnapshot {
   const player = (side: "BLUE" | "RED", slot: number, championName: string, value: number): LivePlayerState => ({
     name: `${side}-${slot}`, side, championName, level: 10, kills: 0, deaths: 0, assists: 0,
-    cs: 100, gold: value, vision: 10, pentakills: 0, items: [], slot,
+    cs: 100, gold: value, vision: 10, pentakills: 0, soloKills: 0, items: [], slot,
   });
   return {
     capturedAt: new Date().toISOString(),
@@ -301,4 +301,29 @@ test("když Agent naběhne až po 15. minutě, gold hráčů ve 14. minutě zůs
   session.endGame();
   const game = buildConfirmedGame(session.meta, session.finalSnapshot!, null);
   assert.equal(game.players[0]?.goldDiffAt14, null);
+});
+
+test("solo kill = kill bez asistence, zabiják musí být hráč; páruje se přes championa", () => {
+  const data = game([
+    { EventID: 1, EventName: "ChampionKill", EventTime: 498, KillerName: "Blue Jungle", VictimName: "Red ADC", Assisters: [] },
+    { EventID: 2, EventName: "ChampionKill", EventTime: 520, KillerName: "Blue Jungle", VictimName: "Red Jungle", Assisters: ["Blue ADC"] },
+    { EventID: 3, EventName: "ChampionKill", EventTime: 600, KillerName: "Turret_TOrder_L1_P3_1", VictimName: "Red ADC", Assisters: [] },
+    { EventID: 4, EventName: "ChampionKill", EventTime: 700, KillerName: "Red ADC#EUW", VictimName: "Blue ADC", Assisters: [] },
+  ]);
+  const solo = soloKillsByChampion(data);
+  assert.equal(solo.get(championKey("BLUE", "Vi")), 1, "kill s asistencí se nepočítá");
+  assert.equal(solo.get(championKey("RED", "Kai'Sa")), 1, "zabiják podle Riot ID s tagem");
+  assert.equal([...solo.values()].reduce((a, b) => a + b, 0), 2, "poprava věží se nepočítá");
+
+  const session = new GameSession(
+    { localGameId: "TEST-8", team1: "Blue", team2: "Red", gameNumber: 1, seriesFormat: "BO1", team1Side: "BLUE", createdAt: new Date().toISOString(), status: "WAITING_FOR_GAME" },
+    ".",
+  );
+  session.applyBroadcast(goldSnapshot(700, [3000, 3000, 3000, 3000]));
+  session.applyLiveEvents(data);
+  const vi = session.currentLive?.players.find((player) => player.championName === "Vi");
+  assert.equal(vi?.soloKills, 1);
+  session.endGame();
+  const confirmed = buildConfirmedGame(session.meta, session.finalSnapshot!, null);
+  assert.equal(confirmed.players.find((player) => player.championName === "Vi")?.soloKills, 1);
 });

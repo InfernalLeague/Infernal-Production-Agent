@@ -50,6 +50,7 @@ musí být idempotentní a vrátit 2xx. `sequence` určuje pořadí zpráv v jed
   4 support); protivník na stejné roli má stejný `slot` na druhé straně.
   Když Agent naběhne až po 15. minutě, zpráva nepřijde,
 - `game.state` – K/D/A, CS, gold (celá čísla), itemy, level, vision, pentakilly,
+  solo killy (kill bez asistence, z Live API),
   `slot`, team kills/gold, game time a `objectives` (součty za tým, dračí duše,
   první drak/baron/věž, timeline).
 

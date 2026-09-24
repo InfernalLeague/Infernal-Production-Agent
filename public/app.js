@@ -272,7 +272,7 @@ function renderRows(tbodyId, players, lane14) {
       return src ? `<img class="item-mini" src="${src}" alt="Item ${id}" title="Item ${id}" loading="lazy">` : "";
     }).join("");
     tr.innerHTML =
-      `<td class="p-cell"><div class="p-wrap">${ava}<span class="p-id"><span class="p-name">${esc(p.name)}</span><span class="p-champ">${esc(p.championName)}</span></span></div></td>` +
+      `<td class="p-cell"><div class="p-wrap">${ava}<span class="p-id"><span class="p-name">${esc(p.name)}</span><span class="p-champ">${esc(p.championName)}${p.soloKills ? ` · ${p.soloKills} solo` : ""}</span></span></div></td>` +
       `<td class="c-lvl">${p.level}</td>` +
       `<td class="c-kda"><b>${p.kills}</b><span class="sep">/</span><span class="d">${p.deaths}</span><span class="sep">/</span><b>${p.assists}</b></td>` +
       `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}${laneDiff(p, lane14)}</td>` +

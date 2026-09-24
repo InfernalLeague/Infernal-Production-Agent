@@ -297,6 +297,31 @@ export function pentakillsByChampion(data: AllGameData): Map<string, number> {
   return out;
 }
 
+/**
+ * Solo killy podle strany a championa: `ChampionKill`, u kterého Live API
+ * neuvádí žádného asistujícího hráče a zabiják je hráč (ne věž ani minion —
+ * poprava se nepočítá). Klíč stejný jako u pentakillů.
+ */
+export function soloKillsByChampion(data: AllGameData): Map<string, number> {
+  const players = data.allPlayers ?? [];
+  const out = new Map<string, number>();
+  for (const event of data.events?.Events ?? []) {
+    if (event.EventName !== "ChampionKill") continue;
+    if (!Array.isArray(event.Assisters) || event.Assisters.length > 0) continue;
+    const player = players.find(
+      (p) =>
+        playerName(p) === event.KillerName ||
+        p.summonerName === event.KillerName ||
+        p.riotId === event.KillerName ||
+        p.riotIdGameName === event.KillerName,
+    );
+    if (!player) continue;
+    const key = championKey(sideOf(player.team), player.championName);
+    out.set(key, (out.get(key) ?? 0) + 1);
+  }
+  return out;
+}
+
 export function championKey(side: Side, championName: string): string {
   return `${side}:${championName.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 }

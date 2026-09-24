@@ -38,6 +38,7 @@ export function normalizeBroadcastSnapshot(data: ingameFrontendData): BroadcastG
         gold: roundOrNull(player.totalGold ?? player.gold),
         vision: Math.round(player.visionScore ?? 0),
         pentakills: 0,
+        soloKills: 0, // LeagueBroadcast je nezná; doplní GameSession z Live API
         items: (player.items ?? [])
           .filter((item) => item.id > 0 && item.count !== 0)
           .sort((a, b) => a.slot - b.slot)

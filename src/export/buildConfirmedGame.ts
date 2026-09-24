@@ -67,6 +67,7 @@ export function buildConfirmedGame(
       gold: p.gold,
       goldPerMinute: null,
       pentakills: p.pentakills,
+      soloKills: p.soloKills ?? 0,
       items: p.items,
       slot,
       opponentChampion: opponent?.championName ?? null,

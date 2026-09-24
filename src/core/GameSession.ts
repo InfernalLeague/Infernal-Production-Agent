@@ -22,6 +22,7 @@ import {
   EPIC_KINDS,
   objectivesFromEvents,
   pentakillsByChampion,
+  soloKillsByChampion,
   STRUCTURE_KINDS,
   tallyObjectives,
 } from "../league/objectives.js";
@@ -60,8 +61,9 @@ export class GameSession {
   private eventState: {
     objectives: GameObjectives;
     pentakills: Map<string, number>;
+    soloKills: Map<string, number>;
     firstBlood: FirstBloodInfo | null;
-  } = { objectives: emptyObjectives(), pentakills: new Map(), firstBlood: null };
+  } = { objectives: emptyObjectives(), pentakills: new Map(), soloKills: new Map(), firstBlood: null };
 
   /** Objektivy z LeagueBroadcast eventů — záloha, když Live API žádné nehlásí. */
   private broadcastKills: ObjectiveKill[] = [];
@@ -315,6 +317,11 @@ export class GameSession {
     for (const [key, count] of pentakills) {
       this.eventState.pentakills.set(key, Math.max(count, this.eventState.pentakills.get(key) ?? 0));
     }
+    // Stejně jako pentakilly: event stream je kumulativní, takže se bere
+    // maximum — kratší seznam po reconnectu nic neubere.
+    for (const [key, count] of soloKillsByChampion(data)) {
+      this.eventState.soloKills.set(key, Math.max(count, this.eventState.soloKills.get(key) ?? 0));
+    }
 
     // First blood je jednorázová událost – jakmile ho jednou zachytíme, držíme ho
     // (chrání proti výpadku/ořezu event streamu v pozdějším pollu).
@@ -332,14 +339,16 @@ export class GameSession {
     };
   }
 
+  /** Doplní hráčům pentakilly a solo killy z event streamu Live API. */
   private withPentakills(players: LivePlayerState[]): LivePlayerState[] {
-    return players.map((player) => ({
-      ...player,
-      pentakills: Math.max(
-        player.pentakills,
-        this.eventState.pentakills.get(championKey(player.side, player.championName)) ?? 0,
-      ),
-    }));
+    return players.map((player) => {
+      const key = championKey(player.side, player.championName);
+      return {
+        ...player,
+        pentakills: Math.max(player.pentakills, this.eventState.pentakills.get(key) ?? 0),
+        soloKills: Math.max(player.soloKills ?? 0, this.eventState.soloKills.get(key) ?? 0),
+      };
+    });
   }
 
   /** Konec hry (workflow §15–§16): zmrazí poslední validní live stav. */

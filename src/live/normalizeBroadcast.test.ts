@@ -44,6 +44,7 @@ test("normalizuje KDA, CS, gold, itemy a herní čas z LeagueBroadcast snapshotu
     gold: 14500,
     vision: 18,
     pentakills: 0,
+    soloKills: 0,
     items: [3031, 3006],
     slot: 0,
   });
@@ -54,8 +55,8 @@ test("kill event doplní jména hráčů podle šampionů", () => {
     capturedAt: new Date().toISOString(), gameTime: 90, patch: null,
     teamKills: { BLUE: 1, RED: 0 }, teamGold: { BLUE: null, RED: null },
     players: [
-      { name: "Blue ADC", side: "BLUE" as const, championName: "Jinx", level: 4, kills: 1, deaths: 0, assists: 0, cs: 25, gold: 1800, vision: 1, pentakills: 0, items: [] },
-      { name: "Red ADC", side: "RED" as const, championName: "Kai'Sa", level: 4, kills: 0, deaths: 1, assists: 0, cs: 22, gold: 1500, vision: 1, pentakills: 0, items: [] },
+      { name: "Blue ADC", side: "BLUE" as const, championName: "Jinx", level: 4, kills: 1, deaths: 0, assists: 0, cs: 25, gold: 1800, vision: 1, pentakills: 0, soloKills: 0, items: [] },
+      { name: "Red ADC", side: "RED" as const, championName: "Kai'Sa", level: 4, kills: 0, deaths: 1, assists: 0, cs: 22, gold: 1500, vision: 1, pentakills: 0, soloKills: 0, items: [] },
     ],
   };
   const event = {

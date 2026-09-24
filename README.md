@@ -101,7 +101,9 @@ osou (`čas;objektiv;typ;tým;stolen`). Věže jdou z Riot Live API, draci a bar
 z LeagueBroadcastu.
 
 Gold je v celých číslech. Sekce `GOLD` má vzorek každých 30 s herního času
-(`čas;modří;červení;rozdíl`). Hráči mají `slot` (role podle pořadí v týmu),
+(`čas;modří;červení;rozdíl`). Hráči mají `solo_kills` (killy bez asistence
+spoluhráčů, z Riot Live API — počítají se jen od chvíle, kdy se spectator
+připojil do hry), `slot` (role podle pořadí v týmu),
 `opponent` a rozdíl goldu proti protivníkovi na stejné roli ve 14. minutě
 (`gold_diff_at_14`). V `confirmed.json` je časová osa goldu týmů (`goldTimeline`)
 a gold hráčů ve 14. minutě (`laneGoldAt14`).

@@ -89,6 +89,8 @@ export interface ConfirmedPlayer {
   gold: number | null;           // primárně ze screenshotu (§22)
   goldPerMinute: number | null;  // primárně ze screenshotu (§22)
   pentakills: number;
+  /** Killy bez asistence spoluhráčů (z Live API, jen od připojení spectatoru). */
+  soloKills: number;
   items: number[];               // itemID list z Live
   /** Pořadí v týmu podle LeagueBroadcastu = role (0 top … 4 support). */
   slot: number | null;
@@ -320,6 +322,8 @@ export interface LivePlayerState {
   gold: number | null;
   vision: number;
   pentakills: number;
+  /** Killy bez asistence spoluhráčů. */
+  soloKills: number;
   items: number[];
   /** Pořadí hráče v týmu (0–4), u LeagueBroadcastu odpovídá roli. */
   slot?: number;

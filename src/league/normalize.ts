@@ -67,6 +67,7 @@ export function normalizePlayers(data: AllGameData): LivePlayerState[] {
       gold: null, // Riot Live Client API osobní gold neposkytuje
       vision: Math.round(p.scores.wardScore), // wardScore = Vision Score (§23)
       pentakills: pentas.get(name) ?? 0,
+      soloKills: 0, // doplní GameSession z event streamu
       items: (p.items ?? []).map((it) => it.itemID),
       slot: slots[side]++,
     };
