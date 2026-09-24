@@ -677,7 +677,7 @@ function tpCd(sec: number): string {
               />
               <img
                 v-else
-                :src="`/icons/role-${player.role}.png`"
+                :src="`icons/role-${player.role}.png`"
                 class="plyr__item-img plyr__quest-ph"
               />
               <svg v-if="player.roleQuestItem && !player.roleQuestItem.ready" class="plyr__item-ring" viewBox="0 0 22 22">
@@ -971,7 +971,7 @@ function tpCd(sec: number): string {
               />
               <img
                 v-else
-                :src="`/icons/role-${player.role}.png`"
+                :src="`icons/role-${player.role}.png`"
                 class="plyr__item-img plyr__quest-ph"
               />
               <svg v-if="player.roleQuestItem && !player.roleQuestItem.ready" class="plyr__item-ring" viewBox="0 0 22 22">

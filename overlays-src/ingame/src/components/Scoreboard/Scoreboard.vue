@@ -363,7 +363,7 @@ function fmtDiff(diff: number): string {
                   transform="rotate(-90 14 14)"
                 />
               </svg>
-              <img class="rq-img" :src="`/icons/role-${quest.role}.png`" :alt="quest.role" />
+              <img class="rq-img" :src="`icons/role-${quest.role}.png`" :alt="quest.role" />
             </div>
           </TransitionGroup>
         </div>
@@ -386,7 +386,7 @@ function fmtDiff(diff: number): string {
           <div class="obj-dragons">
             <TransitionGroup name="obj">
               <div v-for="(dragon, i) in (blue?.dragons ?? []).filter(d => d !== 'Elder').slice(0, 4)" :key="'b-d-' + i" class="obj-icon">
-                <img class="obj-img" :src="'/icons/dragon-' + dragonIcon(dragon) + '-blue.png'" :alt="dragon" />
+                <img class="obj-img" :src="'icons/dragon-' + dragonIcon(dragon) + '-blue.png'" :alt="dragon" />
               </div>
             </TransitionGroup>
           </div>
@@ -400,7 +400,7 @@ function fmtDiff(diff: number): string {
           <div class="obj-dragons">
             <TransitionGroup name="obj">
               <div v-for="(dragon, i) in (red?.dragons ?? []).filter(d => d !== 'Elder').slice(0, 4)" :key="'r-d-' + i" class="obj-icon">
-                <img class="obj-img" :src="'/icons/dragon-' + dragonIcon(dragon) + '-red.png'" :alt="dragon" />
+                <img class="obj-img" :src="'icons/dragon-' + dragonIcon(dragon) + '-red.png'" :alt="dragon" />
               </div>
             </TransitionGroup>
           </div>
@@ -434,7 +434,7 @@ function fmtDiff(diff: number): string {
                   transform="rotate(-90 14 14)"
                 />
               </svg>
-              <img class="rq-img" :src="`/icons/role-${quest.role}.png`" :alt="quest.role" />
+              <img class="rq-img" :src="`icons/role-${quest.role}.png`" :alt="quest.role" />
             </div>
           </TransitionGroup>
         </div>
