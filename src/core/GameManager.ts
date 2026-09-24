@@ -307,6 +307,7 @@ export class GameManager extends EventEmitter {
     if (!this.session) return;
     this.session.endGame();
     log.info(`${this.session.meta.localGameId}: GAME ENDED (${reason})`);
+    this.suggestWinner(this.session);
     if (this.session.finalSnapshot) {
       writeJsonAtomic(path.join(this.session.folder, "live_final.json"), this.session.finalSnapshot);
     }
@@ -316,6 +317,22 @@ export class GameManager extends EventEmitter {
       this.transportSnapshot(this.session) ?? undefined,
     );
     this.emitUpdate();
+  }
+
+  /**
+   * Po konci hry předvyplní vítěze odhadem, pokud ho operátor ještě nezvolil.
+   * Operátor ho před exportem vidí vybraného a může ho přepnout.
+   */
+  private suggestWinner(s: GameSession): void {
+    if (s.winner) return;
+    const side = s.suggestWinnerSide();
+    if (!side) {
+      log.warn(`${s.meta.localGameId}: vítěze se nepodařilo odhadnout, zvol ho ručně.`);
+      return;
+    }
+    const team = side === s.meta.team1Side ? s.meta.team1 : s.meta.team2;
+    s.setWinner(team, "auto");
+    log.info(`${s.meta.localGameId}: odhadnutý vítěz ${team} (${side}) podle poslední zbourané budovy`);
   }
 
   // --- recovery & procesy --------------------------------------------------
@@ -348,7 +365,7 @@ export class GameManager extends EventEmitter {
     const snapshot: FinalLiveSnapshot | null = s.finalSnapshot ?? this.snapshotFromLive(s);
     if (!snapshot) throw new Error("Zatím nejsou žádná live data k exportu.");
 
-    const confirmed = buildConfirmedGame(s.meta, snapshot, s.winner);
+    const confirmed = buildConfirmedGame(s.meta, snapshot, s.winner, s.winnerSource);
     // confirmed.json = source of truth (§50)
     writeJsonAtomic(path.join(s.folder, "confirmed.json"), confirmed);
 

@@ -9,14 +9,18 @@ import type {
   GameStatus,
   LivePlayerState,
   ObjectiveKill,
+  ObjectiveKind,
+  Side,
 } from "../types.js";
 import { firstBlood, normalizePlayers, teamKills } from "../league/normalize.js";
 import {
   championKey,
   emptyObjectives,
   objectivesFromBroadcastEvent,
+  EPIC_KINDS,
   objectivesFromEvents,
   pentakillsByChampion,
+  STRUCTURE_KINDS,
   tallyObjectives,
 } from "../league/objectives.js";
 
@@ -65,6 +69,15 @@ export class GameSession {
 
   /** Poslední EventID z Live API zapsaný do riot_events.jsonl. */
   lastRiotEventId = -1;
+
+  /** Live API v této hře vrátilo aspoň jeden event (čte se event stream). */
+  private riotEventsSeen = false;
+
+  /**
+   * Odkud je vítěz: `auto` = odhad Agenta po konci hry, `manual` = zvolil
+   * operátor. Odhad nikdy nepřepíše volbu operátora.
+   */
+  winnerSource: "auto" | "manual" | null = null;
 
   /** Final live snapshot – po konci hry, už se NEMĚNÍ (workflow §16). */
   finalSnapshot: FinalLiveSnapshot | null = null;
@@ -120,14 +133,41 @@ export class GameSession {
   }
 
   /**
-   * Objektivy hry: z Live API, a když to žádné nehlásí, z LeagueBroadcastu.
+   * Odkud se berou objektivy daného druhu.
    *
-   * Zdroje se nemíchají — oba hlásí tytéž objektivy, jen jinak, a sloučení by
-   * je zdvojilo. Live API má přednost, protože zná i krádeže a přesné budovy.
+   * Oba zdroje hlásí tytéž objektivy, jen jinak, takže se po druzích
+   * **vybírají**, nesčítají — jinak by se každá věž započítala dvakrát.
+   *   - věže a inhibitory: z Live API, jakmile čte event stream (zná přesnou
+   *     budovu), jinak z LeagueBroadcastu,
+   *   - draci, baroni, heraldi, voidgrubi, Atakhan: ve spectatoru je Live API
+   *     nehlásí, takže z LeagueBroadcastu — pokud Live API nějaký epický
+   *     objektiv přece jen nahlásí, má přednost ono (zná i krádeže).
    */
+  private objectiveSource(kind: ObjectiveKind): "live" | "broadcast" {
+    const live = this.eventState.objectives.timeline;
+    if (STRUCTURE_KINDS.includes(kind)) return this.riotEventsSeen ? "live" : "broadcast";
+    return live.some((kill) => EPIC_KINDS.includes(kill.kind)) ? "live" : "broadcast";
+  }
+
+  /** Objektivy hry složené z obou zdrojů podle `objectiveSource`. */
   objectives(): GameObjectives {
-    if (this.eventState.objectives.timeline.length > 0) return this.eventState.objectives;
-    return tallyObjectives(this.broadcastKills);
+    const live = this.eventState.objectives.timeline.filter((kill) => this.objectiveSource(kill.kind) === "live");
+    const broadcast = this.broadcastKills.filter((kill) => this.objectiveSource(kill.kind) === "broadcast");
+    return tallyObjectives([...live, ...broadcast]);
+  }
+
+  /**
+   * Odhad vítěze po konci hry: strana, které se počítala poslední zbouraná
+   * budova v poslední minutě a půl hry. Nexus Live API nehlásí, ale před ním
+   * padají nexusové věže a inhibitor vítězů. `GameEnd.Result` je ve
+   * spectatoru k ničemu — vztahuje se k „vlastnímu“ hráči, který tu není.
+   */
+  suggestWinnerSide(): Side | null {
+    const end = this.currentLive?.durationSeconds ?? 0;
+    const structures = this.objectives().timeline.filter(
+      (kill) => STRUCTURE_KINDS.includes(kill.kind) && kill.gameTime >= end - 90,
+    );
+    return structures.at(-1)?.side ?? null;
   }
 
   /**
@@ -140,7 +180,7 @@ export class GameSession {
     if (kills.length === 0) return [];
     this.broadcastKills.push(...kills);
     if (this.currentLive) this.currentLive.objectives = this.objectives();
-    return this.eventState.objectives.timeline.length > 0 ? [] : kills;
+    return kills.filter((kill) => this.objectiveSource(kill.kind) === "broadcast");
   }
 
   /**
@@ -151,6 +191,7 @@ export class GameSession {
    * zůstávaly na nule. Vrací objektivy, které přibyly od minulého volání.
    */
   applyLiveEvents(data: AllGameData) {
+    if ((data.events?.Events ?? []).length > 0) this.riotEventsSeen = true;
     const known = new Set(this.eventState.objectives.timeline.map((kill) => kill.eventId));
     const objectives = objectivesFromEvents(data);
     // Event stream se po reconnectu může vrátit kratší; už započtené
@@ -174,7 +215,9 @@ export class GameSession {
     }
 
     return {
-      newObjectives: this.eventState.objectives.timeline.filter((kill) => !known.has(kill.eventId)),
+      newObjectives: this.eventState.objectives.timeline.filter(
+        (kill) => !known.has(kill.eventId) && this.objectiveSource(kill.kind) === "live",
+      ),
     };
   }
 
@@ -206,8 +249,9 @@ export class GameSession {
     this.meta.status = "GAME_ENDED";
   }
 
-  setWinner(name: string | null): void {
+  setWinner(name: string | null, source: "auto" | "manual" = "manual"): void {
     this.winner = name;
+    this.winnerSource = name ? source : null;
   }
 
   /** Serializovatelný stav pro dashboard. */
@@ -215,6 +259,7 @@ export class GameSession {
     return {
       meta: this.meta,
       winner: this.winner,
+      winnerSource: this.winnerSource,
       live: this.currentLive,
       finalSnapshot: this.finalSnapshot,
       hasFinalSnapshot: this.finalSnapshot !== null,

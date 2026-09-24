@@ -24,10 +24,21 @@ import { playerName, sideOf } from "./normalize.js";
  * Strana objektivu:
  *   - draci, baroni, heraldi, voidgrubi, Atakhan → strana zabijáka (nebo
  *     prvního asistujícího hráče, když zabiják hráč není),
- *   - věže a inhibitory → podle jména budovy. `_T1_` je budova modrých
- *     (ORDER), takže bod dostává **červená** strana, a naopak. Zabiják tu
- *     bývá minion, podle něj stranu určit nejde.
+ *   - věže a inhibitory → podle jména budovy. Budova modrých (ORDER) dává
+ *     bod **červené** straně a naopak. Zabiják tu bývá minion, podle něj
+ *     stranu určit nejde.
+ *
+ * Co Live API ve spectatoru hlásí (ověřeno 24. 9. 2026 na záznamu hry):
+ * ChampionKill, Multikill, FirstBrick, TurretKilled, InhibKilled, Ace
+ * a GameEnd. **Draky, barony, heraldy ani voidgruby nehlásí vůbec** — ty
+ * dodává LeagueBroadcast. Budovy se jmenují `Turret_TOrder_L1_P3_…`
+ * a `Inhib_TChaos_L1_P1_…`; starší tvar `Turret_T1_…` / `Barracks_T2_…`
+ * se pořád bere taky.
  */
+
+/** Kategorie objektivů, které se mezi zdroji nesčítají, ale vybírají. */
+export const STRUCTURE_KINDS: readonly ObjectiveKind[] = ["tower", "inhibitor"];
+export const EPIC_KINDS: readonly ObjectiveKind[] = ["dragon", "baron", "herald", "voidgrub", "atakhan"];
 
 const DRAGON_TYPES: Record<string, DragonType> = {
   fire: "fire",
@@ -96,11 +107,11 @@ function epicSide(players: RiotPlayer[], event: RiotEvent): Side | null {
   return null;
 }
 
-/** `Turret_T1_L_03_A` / `Barracks_T2_C1` → strana, která budovu zbourala. */
-function structureSide(name: unknown): Side | null {
+/** Jméno budovy → strana, která ji zbourala (budova modrých = bod pro červené). */
+export function structureSide(name: unknown): Side | null {
   if (typeof name !== "string") return null;
-  if (/_T1_/.test(name)) return "RED";
-  if (/_T2_/.test(name)) return "BLUE";
+  if (/_(T1|TOrder)_/i.test(name)) return "RED";
+  if (/_(T2|TChaos)_/i.test(name)) return "BLUE";
   return null;
 }
 

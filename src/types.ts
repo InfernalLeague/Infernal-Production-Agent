@@ -178,7 +178,9 @@ export interface ConfirmedGame {
     seriesFormat: SeriesFormat;
     production?: string;
     durationSeconds: number | null;
-    winner: string | null;        // název vítězného týmu; v 1A zadá operátor
+    winner: string | null;        // název vítězného týmu
+    /** auto = odhad Agenta po konci hry (poslední zbouraná budova), manual = operátor. */
+    winnerSource: "auto" | "manual" | null;
     firstBloodPlayer: string | null; // hráč, který udělal first blood (§ live events)
     firstBloodTeam: string | null;   // tým hráče s first blood
     firstDragonTeam: string | null;

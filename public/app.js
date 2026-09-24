@@ -176,6 +176,8 @@ function render(s) {
   $("redTeamName").textContent = redTeam;
 
   renderWinner(m, sess.winner);
+  // Vítěz předvyplněný odhadem po konci hry (poslední zbouraná budova).
+  $("winnerAuto").hidden = !(sess.winner && sess.winnerSource === "auto");
 
   // live tabulky
   const live = sess.live;

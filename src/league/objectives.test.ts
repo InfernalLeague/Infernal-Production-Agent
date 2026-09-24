@@ -184,3 +184,49 @@ test("záloha z LeagueBroadcastu: draci s typem, grub, herald, věže a inhibito
   assert.equal(session.objectives().teams.RED.barons, 0);
   assert.equal(event("objective", 1600, { objective: "DRAGON_ELDER", eventType: "Kill", team: 1 }).length, 0);
 });
+
+test("spectator: budovy jako Turret_TOrder_…/Inhib_TChaos_… z Live API, draci z LeagueBroadcastu, bez zdvojení", () => {
+  const session = new GameSession(
+    {
+      localGameId: "TEST-4",
+      team1: "Blue",
+      team2: "Red",
+      gameNumber: 1,
+      seriesFormat: "BO1",
+      team1Side: "BLUE",
+      createdAt: new Date().toISOString(),
+      status: "WAITING_FOR_GAME",
+    },
+    ".",
+  );
+  // Tvar eventů podle zkušebního spectatu 24. 9. 2026 (Ixtal vs Freljord).
+  const riot: RiotEvent[] = [
+    { EventID: 0, EventName: "GameStart", EventTime: 0 },
+    { EventID: 9, EventName: "TurretKilled", EventTime: 644, KillerName: "Blue ADC", TurretKilled: "Turret_TChaos_L2_P3_2521511112_0", Assisters: [] },
+    { EventID: 20, EventName: "TurretKilled", EventTime: 908, KillerName: "Red ADC", TurretKilled: "Turret_TOrder_L0_P3_3795288474_0", Assisters: [] },
+    { EventID: 75, EventName: "InhibKilled", EventTime: 1751, KillerName: "Red ADC", InhibKilled: "Inhib_TOrder_L1_P1_2786523670_0", Assisters: [] },
+    { EventID: 79, EventName: "TurretKilled", EventTime: 1768, KillerName: "Red ADC", TurretKilled: "Turret_TOrder_L1_P5_3625540808_0", Assisters: [] },
+  ];
+  session.applyLiveEvents(game(riot));
+  const broadcast = (type: "objective" | "team.update", gameTime: number, payload: Record<string, unknown>) =>
+    session.applyBroadcastEvent({ type, capturedAt: new Date().toISOString(), gameTime, payload });
+
+  // Stejné věže hlásí i LeagueBroadcast — nesmí se přičíst ani poslat do streamu.
+  assert.equal(broadcast("team.update", 908, { teamId: 2, platesTaken: 0, turretsTaken: 1, inhibitorsTaken: 0 }).length, 0);
+  // Draka Live API ve spectatoru nehlásí, bere se z LeagueBroadcastu.
+  assert.equal(broadcast("objective", 822, { objective: "DRAGON_AIR", eventType: "Kill", killer: "Red Jungle#EUNE", team: 2 }).length, 1);
+
+  const objectives = session.objectives();
+  assert.equal(objectives.teams.BLUE.towers, 1);
+  assert.equal(objectives.teams.RED.towers, 2);
+  assert.equal(objectives.teams.RED.inhibitors, 1);
+  assert.equal(objectives.teams.RED.dragonTypes.air, 1);
+  assert.equal(objectives.firstTower, "BLUE");
+
+  // Vítěz: poslední zbouraná budova v závěru hry patří červeným.
+  session.applyBroadcast({
+    capturedAt: new Date().toISOString(), gameTime: 1782, players: [],
+    teamKills: { BLUE: 21, RED: 47 }, teamGold: { BLUE: null, RED: null }, patch: null,
+  });
+  assert.equal(session.suggestWinnerSide(), "RED");
+});

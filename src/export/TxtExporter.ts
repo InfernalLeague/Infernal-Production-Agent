@@ -25,6 +25,7 @@ export class TxtExporter {
     L.push(`duration=${formatDuration(g.durationSeconds)}`);
     L.push(`duration_seconds=${g.durationSeconds ?? ""}`);
     L.push(`winner=${g.winner ?? ""}`);
+    L.push(`winner_source=${g.winnerSource ?? ""}`);
     L.push(`first_blood_player=${g.firstBloodPlayer ?? ""}`);
     L.push(`first_blood_team=${g.firstBloodTeam ?? ""}`);
     L.push(`first_dragon_team=${g.firstDragonTeam ?? ""}`);

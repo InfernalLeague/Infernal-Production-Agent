@@ -19,6 +19,7 @@ export function buildConfirmedGame(
   meta: GameMeta,
   snapshot: FinalLiveSnapshot,
   winner: string | null,
+  winnerSource: "auto" | "manual" | null = null,
 ): ConfirmedGame {
   const teamNameOf = (side: Side): string =>
     side === meta.team1Side ? meta.team1 : meta.team2;
@@ -74,6 +75,7 @@ export function buildConfirmedGame(
       production: meta.production,
       durationSeconds: snapshot.durationSeconds,
       winner,
+      winnerSource: winner ? winnerSource : null,
       firstBloodPlayer: fb ? fb.playerName : null,
       firstBloodTeam: fb ? teamNameOf(fb.side) : null,
       firstDragonTeam: teamOrNull(objectives.firstDragon),

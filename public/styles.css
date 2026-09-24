@@ -504,3 +504,6 @@ body[data-prod="kick"] { --flame: #ff4500; --flame2: #ff8c00; --prod: #53fc18; }
 body[data-prod="twitch"] .btn-primary { color: var(--on-fire); }
 body[data-prod] .prod-pill { border-color: var(--prod); box-shadow: 0 0 14px -4px var(--prod); }
 body[data-prod="twitch"] .brand-logo, body[data-prod="kick"] .brand-logo { filter: drop-shadow(0 0 10px rgba(255, 69, 0, 0.45)); }
+
+/* Vítěz odhadnutý Agentem — operátor ho má před exportem zkontrolovat. */
+.winner-auto { color: var(--amber); letter-spacing: 0.08em; }
