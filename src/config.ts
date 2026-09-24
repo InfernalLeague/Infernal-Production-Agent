@@ -50,15 +50,6 @@ export const config = {
   /** Live Client Data API běžící lokálně s League hrou. */
   liveApiBase: "https://127.0.0.1:2999",
 
-  /**
-   * Lockfile League klienta (pro LCU API = champ select / bany / picky).
-   * Přepíše se přes LCU_LOCKFILE. Default = standardní instalace.
-   */
-  lcuLockfile: process.env.LCU_LOCKFILE ?? "C:\\Riot Games\\League of Legends\\lockfile",
-
-  /** Jak často číst champ select z LCU. */
-  champSelectPollMs: 1500,
-
   /** Jak často číst live data (workflow §9: cca 1× za sekundu). */
   pollIntervalMs: 1000,
 

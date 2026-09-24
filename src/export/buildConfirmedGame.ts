@@ -2,7 +2,6 @@ import type {
   ConfirmedGame,
   ConfirmedPlayer,
   ConfirmedTeam,
-  Draft,
   FinalLiveSnapshot,
   GameMeta,
   Side,
@@ -20,7 +19,6 @@ export function buildConfirmedGame(
   meta: GameMeta,
   snapshot: FinalLiveSnapshot,
   winner: string | null,
-  draft: Draft | null = null,
 ): ConfirmedGame {
   const teamNameOf = (side: Side): string =>
     side === meta.team1Side ? meta.team1 : meta.team2;
@@ -88,6 +86,5 @@ export function buildConfirmedGame(
     teams,
     players,
     objectiveTimeline: objectives.timeline.map((kill) => ({ ...kill, team: teamNameOf(kill.side) })),
-    draft,
   };
 }

@@ -1,5 +1,5 @@
 // Vygeneruje build/icon.ico (multi-size) z loga ligy pro balení (.exe/installer)
-// a public/favicon.png pro dashboard. Zdroj: overlays-src/pickban/public/il-logo.png.
+// a public/favicon.png pro dashboard. Zdroj: build/il-logo.png.
 // Spusť: node scripts/make-icon.mjs
 
 import pngToIco from "png-to-ico";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const LOGO = process.env.LOGO_PNG ?? path.join(ROOT, "overlays-src", "pickban", "public", "il-logo.png");
+const LOGO = process.env.LOGO_PNG ?? path.join(ROOT, "build", "il-logo.png");
 
 if (!fs.existsSync(LOGO)) {
   console.error(`[make-icon] Logo nenalezeno: ${LOGO}`);

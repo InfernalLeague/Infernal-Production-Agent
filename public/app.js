@@ -175,7 +175,6 @@ function render(s) {
   $("blueTeamName").textContent = blueTeam;
   $("redTeamName").textContent = redTeam;
 
-  renderDraft(sess.draft, blueTeam, redTeam);
   renderWinner(m, sess.winner);
 
   // live tabulky
@@ -256,41 +255,6 @@ function renderWinner(m, winner) {
   [...seg.children].forEach((b) => b.classList.toggle("active", b.dataset.team === currentWinner));
 }
 
-function renderDraft(draft, blueTeam, redTeam) {
-  const panel = $("draftPanel");
-  if (!draft || (draft.bans.length === 0 && draft.picks.length === 0)) {
-    panel.hidden = true;
-    return;
-  }
-  panel.hidden = false;
-  $("draftBlueName").textContent = `BLUE · ${blueTeam}`;
-  $("draftRedName").textContent = `RED · ${redTeam}`;
-
-  const bans = (side) => draft.bans.filter((b) => b.side === side).sort((a, b) => a.order - b.order);
-  const picks = (side) => draft.picks.filter((p) => p.side === side).sort((a, b) => a.order - b.order);
-
-  fillChips("blueBans", bans("BLUE").map((b) => ({ text: b.championName, cls: "ban" })));
-  fillChips("redBans", bans("RED").map((b) => ({ text: b.championName, cls: "ban" })));
-  fillChips("bluePicks", picks("BLUE").map((p) => ({ ord: p.order, text: p.championName, pos: p.position })));
-  fillChips("redPicks", picks("RED").map((p) => ({ ord: p.order, text: p.championName, pos: p.position })));
-}
-
-function fillChips(id, items) {
-  const el = $(id);
-  el.innerHTML = "";
-  for (const it of items) {
-    const span = document.createElement("span");
-    span.className = "chip" + (it.cls ? " " + it.cls : "");
-    const icon = champIcon(it.text);
-    const img = icon ? `<img class="chip-ico" src="${icon}" alt="" loading="lazy" onerror="this.remove()">` : "";
-    const ord = it.ord ? `<span class="ord">${it.ord}</span>` : "";
-    const pos = it.pos ? `<span class="pos">${esc(it.pos)}</span>` : "";
-    span.innerHTML = `${ord}${img}<span class="chip-name">${esc(it.text)}</span>${pos}`;
-    el.appendChild(span);
-  }
-  if (items.length === 0) el.innerHTML = '<span class="chip empty">—</span>';
-}
-
 function renderRows(tbodyId, players) {
   const tb = $(tbodyId);
   tb.innerHTML = "";
@@ -351,7 +315,7 @@ document.querySelectorAll(".mock-cb").forEach((cb) => (cb.onchange = () => loadO
 
 function activeSub() {
   const b = document.querySelector(".sub-tab.active");
-  return b ? b.dataset.sub : "pickban";
+  return b ? b.dataset.sub : "ingame";
 }
 
 function switchTab(tab) {
@@ -371,7 +335,6 @@ document.querySelectorAll(".nav-tab").forEach((b) => (b.onclick = () => switchTa
 document.querySelectorAll(".sub-tab").forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
 
 // URL overlayů + tlačítka kopírovat / otevřít
-$("urlPickban").textContent = overlayUrl("pickban");
 $("urlIngame").textContent = overlayUrl("ingame");
 document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
   const text = $(b.dataset.copy).textContent;

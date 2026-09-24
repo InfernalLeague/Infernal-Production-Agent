@@ -34,8 +34,6 @@ export class TxtExporter {
     L.push(`confirmed_at=${g.confirmedAt ?? ""}`);
     L.push("");
 
-    this.draftLines(game).forEach((line) => L.push(line));
-
     game.teams.forEach((t, i) => {
       L.push(`TEAM${i + 1}`);
       L.push(`name=${t.name}`);
@@ -73,31 +71,6 @@ export class TxtExporter {
     });
 
     return L.join("\n").trimEnd() + "\n";
-  }
-
-  /** Sekce DRAFT: bany a picky v pořadí, po týmech (§ champ select). */
-  private draftLines(game: ConfirmedGame): string[] {
-    if (!game.draft) return [];
-    const draft = game.draft;
-    const sideOfTeam = (teamName: string): Side =>
-      game.teams.find((t) => t.name === teamName)?.side ?? "BLUE";
-
-    const bansOf = (side: Side): string =>
-      draft.bans.filter((b) => b.side === side).sort((a, b) => a.order - b.order)
-        .map((b) => b.championName).join(";");
-    const picksOf = (side: Side): string =>
-      draft.picks.filter((p) => p.side === side).sort((a, b) => a.order - b.order)
-        .map((p) => p.championName).join(";");
-
-    const s1 = sideOfTeam(game.game.team1);
-    const s2 = sideOfTeam(game.game.team2);
-    const out: string[] = ["DRAFT", `complete=${draft.complete}`];
-    out.push(`team1_bans=${bansOf(s1)}`);
-    out.push(`team2_bans=${bansOf(s2)}`);
-    out.push(`team1_picks=${picksOf(s1)}`);
-    out.push(`team2_picks=${picksOf(s2)}`);
-    out.push("");
-    return out;
   }
 
   private playerLines(p: ConfirmedPlayer): string[] {

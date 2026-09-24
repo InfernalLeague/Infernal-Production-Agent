@@ -7,7 +7,6 @@ import type {
   BroadcastGameEvent,
   BroadcastGameSnapshot,
   CreateGameInput,
-  Draft,
   FinalLiveSnapshot,
   GameMeta,
   LiveTransportSource,
@@ -19,7 +18,6 @@ import { log } from "../util/logger.js";
 import { ensureDirs, gameFolder, writeJsonAtomic } from "../util/storage.js";
 import { checkLeagueProcesses } from "../util/processCheck.js";
 import { LeagueDataCollector } from "../league/LeagueDataCollector.js";
-import { ChampSelectCollector } from "../champselect/ChampSelectCollector.js";
 import { GameSession } from "./GameSession.js";
 import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
 import { exportConfirmedGame, type ExportMethod, type ExportResult } from "../export/exportConfirmedGame.js";
@@ -43,7 +41,6 @@ export class GameManager extends EventEmitter {
 
   constructor(
     private readonly collector: LeagueDataCollector,
-    private readonly champSelect: ChampSelectCollector,
     private readonly broadcast: LeagueBroadcastCollector,
     private readonly publisher: LiveStreamPublisher,
   ) {
@@ -51,7 +48,6 @@ export class GameManager extends EventEmitter {
     ensureDirs();
     this.collector.on("data", (d: AllGameData) => this.onData(d));
     this.collector.on("unreachable", () => this.onUnreachable());
-    this.champSelect.on("draft", (draft: Draft | null) => this.onDraft(draft));
     this.broadcast.on("snapshot", (snapshot: BroadcastGameSnapshot) => this.onBroadcastSnapshot(snapshot));
     this.broadcast.on("gameEvent", (event: BroadcastGameEvent) => this.onBroadcastEvent(event));
     this.broadcast.on("gameStatus", (status: GameState) => this.onBroadcastGameStatus(status));
@@ -61,7 +57,6 @@ export class GameManager extends EventEmitter {
 
   start(): void {
     this.collector.start();
-    this.champSelect.start();
     this.broadcast.start();
     this.recoveryTimer = setInterval(() => this.writeRecovery(), config.recoveryIntervalMs);
     this.processTimer = setInterval(() => void this.refreshProcesses(), 3000);
@@ -308,41 +303,6 @@ export class GameManager extends EventEmitter {
     }
   }
 
-  /**
-   * Champ select draft. Aplikujeme jen dokud hra nezačala (CREATED/WAITING),
-   * ať draft další hry nepřepíše už zmrazený draft rozehrané/skončené hry.
-   * Když draft skončí (null), poslední zachycený zůstává (zmrazený).
-   *
-   * Pozor na přechod champ select → hra: poslední čtení LCU těsně před startem
-   * hry se často vrátí "rozpadlé" (akce už nejsou completed → prázdné bany/picky).
-   * Takový chudší draft NESMÍ přepsat už zachycený bohatší draft, jinak se bany
-   * ztratí a nedostanou se do exportu. Proto ukládáme jen lepší/kompletnější draft.
-   */
-  private onDraft(draft: Draft | null): void {
-    if (!draft || !this.session) return;
-    const st = this.session.status;
-    if (st !== "CREATED" && st !== "WAITING_FOR_GAME") return;
-    const prev = this.session.draft;
-    if (prev && !this.isBetterDraft(draft, prev)) return;
-    this.session.draft = draft;
-    this.emitUpdate();
-  }
-
-  /**
-   * Je `next` draft aspoň tak dobrý jako `prev`? Bere v úvahu, že normální
-   * průběh draftu jen přidává bany/picky (počet roste), zatímco degradovaný
-   * read na konci champ selectu je vynuluje.
-   *  - Kompletní draft je zmrazený → nic ho nepřepíše.
-   *  - Kompletní `next` vždy vyhrává nad nekompletním `prev`.
-   *  - Jinak vyhrává ten s víc zachycenými bany+picky (při shodě necháme novější).
-   */
-  private isBetterDraft(next: Draft, prev: Draft): boolean {
-    if (prev.complete) return false;
-    if (next.complete) return true;
-    const richness = (d: Draft): number => d.bans.length + d.picks.length;
-    return richness(next) >= richness(prev);
-  }
-
   private endCurrentGame(reason: string): void {
     if (!this.session) return;
     this.session.endGame();
@@ -388,7 +348,7 @@ export class GameManager extends EventEmitter {
     const snapshot: FinalLiveSnapshot | null = s.finalSnapshot ?? this.snapshotFromLive(s);
     if (!snapshot) throw new Error("Zatím nejsou žádná live data k exportu.");
 
-    const confirmed = buildConfirmedGame(s.meta, snapshot, s.winner, s.draft);
+    const confirmed = buildConfirmedGame(s.meta, snapshot, s.winner);
     // confirmed.json = source of truth (§50)
     writeJsonAtomic(path.join(s.folder, "confirmed.json"), confirmed);
 
@@ -422,7 +382,6 @@ export class GameManager extends EventEmitter {
       leagueGame: this.processes.game,
       liveApiReachable: this.collector.reachable,
       lastOkAt: this.collector.lastOkAt,
-      champSelectActive: this.champSelect.active,
       leagueBroadcast: this.broadcast.getStatus(),
       liveDelivery: this.publisher.getStatus(),
       session: this.session ? this.session.toClient() : null,

@@ -7,6 +7,11 @@ Rozhodnutí (2026-08-24):
 - **Live data pro ingame overlay:** LeagueBroadcast (3. strana, `localhost:58869`) zůstává
   externí závislost — dokumentovat jako prerekvizitu, případně později spouštět jako child-process.
 
+Rozhodnutí (2026-09-24):
+- **Draft (pick/ban) Agent neřeší.** Pick/ban overlay i čtení champ selectu z LCU
+  jsou odebrané; draft i jeho overlay běží v Champion Draftu na webu. Zmínky
+  o `pickban` níž jsou historické.
+
 ## Cílová architektura
 
 ```

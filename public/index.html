@@ -121,23 +121,6 @@
           </div>
         </div>
 
-        <div id="draftPanel" class="draft" hidden>
-          <div class="draft-col">
-            <div class="draft-side side-blue" id="draftBlueName">BLUE</div>
-            <div class="draft-label">Bans</div>
-            <div class="draft-bans" id="blueBans"></div>
-            <div class="draft-label">Picks</div>
-            <div class="draft-picks" id="bluePicks"></div>
-          </div>
-          <div class="draft-col">
-            <div class="draft-side side-red" id="draftRedName">RED</div>
-            <div class="draft-label">Bans</div>
-            <div class="draft-bans" id="redBans"></div>
-            <div class="draft-label">Picks</div>
-            <div class="draft-picks" id="redPicks"></div>
-          </div>
-        </div>
-
         <div class="sb-header">
           <div class="sb-team blue">
             <span class="tag side-blue">BLUE</span>
@@ -187,22 +170,10 @@
     <!-- ============ OVERLAYS ============ -->
     <section class="tabview" data-view="overlays">
       <nav class="subnav">
-        <button class="sub-tab active" data-sub="pickban">Pick / Ban</button>
-        <button class="sub-tab" data-sub="ingame">Ingame</button>
+        <button class="sub-tab active" data-sub="ingame">Ingame</button>
       </nav>
 
-      <div class="subview active" data-subview="pickban">
-        <div class="overlay-bar">
-          <span class="overlay-label">OBS Browser Source URL</span>
-          <code class="overlay-url" id="urlPickban"></code>
-          <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlPickban">Kopírovat</button>
-          <button class="btn btn-sm btn-ghost" data-open="urlPickban">Otevřít</button>
-          <label class="mock-toggle"><input type="checkbox" class="mock-cb" data-mock="pickban" checked /> Náhled s mock daty</label>
-        </div>
-        <div class="overlay-preview"><iframe data-lazy="pickban" title="Pick/Ban overlay"></iframe></div>
-      </div>
-
-      <div class="subview" data-subview="ingame">
+      <div class="subview active" data-subview="ingame">
         <div class="overlay-bar">
           <span class="overlay-label">OBS Browser Source URL</span>
           <code class="overlay-url" id="urlIngame"></code>

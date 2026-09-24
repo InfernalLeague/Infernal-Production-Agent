@@ -31,17 +31,14 @@ jobs:
           echo "package.json=$PKG  tag=$TAG"
           test "$PKG" = "$TAG" || { echo "::error::Tag v$TAG != package.json $PKG — zvedni version a otaguj správný commit."; exit 1; }
 
-      # Závislosti Agenta i obou overlayů (monorepo).
+      # Závislosti Agenta a ingame overlaye (monorepo).
       - name: Install deps (agent)
         run: npm ci
       - name: Install deps (overlay ingame)
         run: npm ci
         working-directory: overlays-src/ingame
-      - name: Install deps (overlay pickban)
-        run: npm ci
-        working-directory: overlays-src/pickban
 
-      # tsc backend + vite build obou overlayů → overlays/
+      # tsc backend + vite build ingame overlaye → overlays/
       - name: Build (backend + overlays)
         run: npm run build:all
 

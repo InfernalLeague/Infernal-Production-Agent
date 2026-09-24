@@ -2,7 +2,6 @@ import type {
   AllGameData,
   BroadcastGameEvent,
   BroadcastGameSnapshot,
-  Draft,
   FinalLiveSnapshot,
   FirstBloodInfo,
   GameMeta,
@@ -72,9 +71,6 @@ export class GameSession {
 
   /** Vítěz – v 1A ho zadá operátor (Live spectator ho spolehlivě nedá). */
   winner: string | null = null;
-
-  /** Draft z champ selectu (bany + picky), pokud byl zachycen. */
-  draft: Draft | null = null;
 
   constructor(meta: GameMeta, folder: string) {
     this.meta = meta;
@@ -219,7 +215,6 @@ export class GameSession {
     return {
       meta: this.meta,
       winner: this.winner,
-      draft: this.draft,
       live: this.currentLive,
       finalSnapshot: this.finalSnapshot,
       hasFinalSnapshot: this.finalSnapshot !== null,

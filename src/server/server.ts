@@ -20,10 +20,9 @@ export function startServer(manager: GameManager): void {
   app.use(express.static(config.paths.public));
 
   // Overlaye (Vue buildy) servírované z jednoho serveru pod různými cestami.
-  // OBS browser source pak míří na http://localhost:<port>/overlay/ingame|pickban.
+  // OBS browser source pak míří na http://localhost:<port>/overlay/ingame.
   // Nahrazuje samostatné Vite dev servery (viz docs/ROADMAP.md, Fáze 0).
   mountOverlay(app, "ingame");
-  mountOverlay(app, "pickban");
 
   app.get("/api/state", (_req, res) => res.json(manager.getState()));
 

@@ -4,8 +4,8 @@
 //
 // Zdroj overlayů je v monorepu Agenta:
 //   overlays-src/ingame   → overlays/ingame
-//   overlays-src/pickban  → overlays/pickban
-// Cesty lze přepsat přes INGAME_OVERLAY_DIR / PICKBAN_OVERLAY_DIR.
+// Cestu lze přepsat přes INGAME_OVERLAY_DIR. Pick/ban overlay tu není:
+// draft běží v Champion Draftu na webu.
 
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -20,10 +20,6 @@ const overlays = [
   {
     name: "ingame",
     src: process.env.INGAME_OVERLAY_DIR ?? path.join(SRC_ROOT, "ingame"),
-  },
-  {
-    name: "pickban",
-    src: process.env.PICKBAN_OVERLAY_DIR ?? path.join(SRC_ROOT, "pickban"),
   },
 ];
 
@@ -52,4 +48,4 @@ for (const { name, src } of overlays) {
   console.log(`[build-overlays] zkopírováno → ${dest}`);
 }
 
-console.log("\n[build-overlays] Hotovo. Overlaye poběží na /overlay/ingame a /overlay/pickban.");
+console.log("\n[build-overlays] Hotovo. Overlay poběží na /overlay/ingame.");
