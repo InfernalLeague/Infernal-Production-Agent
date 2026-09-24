@@ -84,9 +84,13 @@ export class LeagueBroadcastCollector extends EventEmitter {
       log.info(`LeagueBroadcast WebSocket připojen (${this.host}:${this.port}).`);
     });
     this.client.onIngameDisconnect(() => {
+      // Klient se při nedostupném LeagueBroadcastu zkouší připojit každých
+      // pár sekund a každý neúspěch hlásí jako odpojení. Do logu jde jen
+      // skutečná ztráta spojení, ne každý další pokus.
+      const wasConnected = this.status.connected;
       this.status.connected = false;
       this.emitStatus();
-      log.warn("LeagueBroadcast WebSocket odpojen – Riot Live API zůstává jako záloha.");
+      if (wasConnected) log.warn("LeagueBroadcast WebSocket odpojen – Riot Live API zůstává jako záloha.");
     });
     this.client.onIngameError((error) => {
       this.status.lastError = error instanceof Error ? error.message : "WebSocket connection error";
