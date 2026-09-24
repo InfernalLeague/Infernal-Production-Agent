@@ -174,13 +174,17 @@ test("LeagueBroadcast: draci s typem, baron a věže podle týmu", () => {
   assert.equal(objectives.timeline.filter((kill) => kill.kind === "tower").length, 2, "inhibitor se nepočítá");
   assert.equal(objectives.firstTower, "BLUE");
 
-  // Jakmile objektivy hlásí Live API, má přednost a LeagueBroadcast se nepřičítá.
+  // Live API ve spectatoru občas nahlásí jednotlivého (ukradeného) draka.
+  // Zdroj se kvůli tomu nepřepne: draci a baroni zůstávají z LeagueBroadcastu,
+  // z Live API se převezme jen krádež (třetí zkušební hra, 24. 9. 2026).
   session.applyLiveEvents(game([
-    { EventID: 1, EventName: "DragonKill", EventTime: 541, DragonType: "Water", KillerName: "Blue Jungle", Stolen: "False" },
+    { EventID: 1, EventName: "DragonKill", EventTime: 543, DragonType: "Water", KillerName: "Blue Jungle", Stolen: "True" },
   ]));
-  assert.equal(session.objectives().teams.BLUE.dragons, 1);
-  assert.equal(session.objectives().teams.RED.barons, 0);
-  assert.equal(event("objective", 1600, { objective: "DRAGON_ELDER", eventType: "Kill", team: 1 }).length, 0);
+  const after = session.objectives();
+  assert.equal(after.teams.BLUE.dragons, 1, "drak se nezdvojí");
+  assert.equal(after.teams.RED.barons, 1, "baron z LeagueBroadcastu nezmizí");
+  assert.equal(after.timeline.find((kill) => kill.kind === "dragon")?.stolen, true, "krádež z Live API");
+  assert.equal(event("objective", 1600, { objective: "DRAGON_ELDER", eventType: "Kill", team: 1 }).length, 1);
 });
 
 test("spectator: věže jako Turret_TOrder_… z Live API, draci z LeagueBroadcastu, bez zdvojení", () => {

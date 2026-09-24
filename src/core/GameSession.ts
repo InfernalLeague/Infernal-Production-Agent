@@ -228,22 +228,42 @@ export class GameSession {
    *
    * Oba zdroje hlásí tytéž objektivy, jen jinak, takže se po druzích
    * **vybírají**, nesčítají — jinak by se každá věž započítala dvakrát.
-   *   - věže a inhibitory: z Live API, jakmile čte event stream (zná přesnou
-   *     budovu), jinak z LeagueBroadcastu,
-   *   - draci, baroni, heraldi, voidgrubi, Atakhan: ve spectatoru je Live API
-   *     nehlásí, takže z LeagueBroadcastu — pokud Live API nějaký epický
-   *     objektiv přece jen nahlásí, má přednost ono (zná i krádeže).
+   *   - věže: z Live API, jakmile čte event stream (zná přesnou budovu),
+   *     jinak z LeagueBroadcastu,
+   *   - draci a baroni: z LeagueBroadcastu, jakmile v téhle hře poslal data.
+   *     Live API je ve spectatoru hlásí jen výjimečně — ve třetí zkušební hře
+   *     (24. 9. 2026) poslalo jediného, ukradeného draka z pěti — a dřívější
+   *     pravidlo „jakmile Live API nahlásí epický objektiv, ber ho odtud“
+   *     kvůli tomu zahodilo zbylé draky i barona. Live API tak pro draky
+   *     a barony slouží jen jako záloha, když LeagueBroadcast neběží, a jako
+   *     zdroj informace o krádeži (viz `objectives`).
    */
   private objectiveSource(kind: ObjectiveKind): "live" | "broadcast" {
-    const live = this.eventState.objectives.timeline;
     if (STRUCTURE_KINDS.includes(kind)) return this.riotEventsSeen ? "live" : "broadcast";
-    return live.some((kill) => EPIC_KINDS.includes(kill.kind)) ? "live" : "broadcast";
+    return this.broadcastSeen || this.broadcastKills.length > 0 ? "broadcast" : "live";
   }
 
-  /** Objektivy hry složené z obou zdrojů podle `objectiveSource`. */
+  /**
+   * Objektivy hry složené z obou zdrojů podle `objectiveSource`.
+   *
+   * Krádež LeagueBroadcast nehlásí. Když Live API nahlásí tentýž objektiv
+   * (stejný druh, strana a čas do 10 s) jako ukradený, převezme se to.
+   */
   objectives(): GameObjectives {
-    const live = this.eventState.objectives.timeline.filter((kill) => this.objectiveSource(kill.kind) === "live");
-    const broadcast = this.broadcastKills.filter((kill) => this.objectiveSource(kill.kind) === "broadcast");
+    const liveAll = this.eventState.objectives.timeline;
+    const live = liveAll.filter((kill) => this.objectiveSource(kill.kind) === "live");
+    const broadcast = this.broadcastKills
+      .filter((kill) => this.objectiveSource(kill.kind) === "broadcast")
+      .map((kill) => {
+        const stolen = liveAll.some(
+          (other) =>
+            other.stolen &&
+            other.kind === kill.kind &&
+            other.side === kill.side &&
+            Math.abs(other.gameTime - kill.gameTime) <= 10,
+        );
+        return stolen ? { ...kill, stolen: true } : kill;
+      });
     return tallyObjectives([...live, ...broadcast]);
   }
 
