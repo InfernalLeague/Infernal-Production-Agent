@@ -192,6 +192,11 @@ function render(s) {
   $("blueGold").textContent = gold && gold.BLUE != null ? `${fmtGold(gold.BLUE)} gold` : "— gold";
   $("redGold").textContent = gold && gold.RED != null ? `${fmtGold(gold.RED)} gold` : "— gold";
 
+  // objektivy (draci podle typu, baroni, heraldi, voidgrubi, věže, inhiby)
+  const objectives = live ? live.objectives : (sess.finalSnapshot ? sess.finalSnapshot.objectives : null);
+  $("blueObj").textContent = fmtObjectives(objectives && objectives.teams.BLUE);
+  $("redObj").textContent = fmtObjectives(objectives && objectives.teams.RED);
+
   // first blood (jméno + strana), jakmile padne první krev
   const fb = live ? live.firstBlood : (sess.finalSnapshot ? sess.finalSnapshot.firstBlood : null);
   const fbEl = $("firstBlood");
@@ -208,6 +213,25 @@ function render(s) {
 
   // export tlačítko aktivní, jakmile máme data
   $("exportBtn").disabled = players.length === 0;
+}
+
+const DRAGON_LABELS = {
+  fire: "Infernal", earth: "Mountain", water: "Ocean", air: "Cloud",
+  hextech: "Hextech", chemtech: "Chemtech", elder: "Elder",
+};
+
+function fmtObjectives(t) {
+  if (!t) return "";
+  const dragons = Object.entries(t.dragonTypes)
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => (count > 1 ? `${count}× ` : "") + DRAGON_LABELS[type])
+    .join(", ");
+  const parts = [`🐉 ${t.dragons}${dragons ? ` (${dragons})` : ""}`];
+  if (t.dragonSoul) parts.push(`duše ${DRAGON_LABELS[t.dragonSoul]}`);
+  parts.push(`Baron ${t.barons}`, `Herald ${t.heralds}`, `Grubs ${t.voidgrubs}`);
+  if (t.atakhans) parts.push(`Atakhan ${t.atakhans}`);
+  parts.push(`Věže ${t.towers}`, `Inhib ${t.inhibitors}`);
+  return parts.join(" · ");
 }
 
 function renderWinner(m, winner) {

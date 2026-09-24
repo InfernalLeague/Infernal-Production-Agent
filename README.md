@@ -111,6 +111,12 @@ Ve složce `games/<datum>_<team1>_<team2>_G<n>/`:
 - `live_events.jsonl` — průběžné eventy/snapshoty pro testování databázového kontraktu
 - `live_state.json` — poslední publikovaný stav hry
 
+Export obsahuje za každý tým draky podle typu (včetně Eldera a dračí duše),
+barony, heraldy, voidgruby, Atakhana, věže a inhibitory, u hry první draka,
+barona a věž a sekci `OBJECTIVES` s časovou osou (`čas;objektiv;typ;tým;stolen`).
+Zdrojem je event stream Riot Live API, který se čte vždy; LeagueBroadcast dál
+dodává statistiky hráčů.
+
 `data/current_game/live_snapshot.json` je recovery snapshot (každých 5 s při LIVE).
 
 Bez databázového endpointu běží publisher v režimu `local-only`. Pozdější

@@ -10,6 +10,7 @@ import type {
   Draft,
   FinalLiveSnapshot,
   GameMeta,
+  ObjectiveKill,
   Side,
 } from "../types.js";
 import { config } from "../config.js";
@@ -121,7 +122,18 @@ export class GameManager extends EventEmitter {
   private onData(data: AllGameData): void {
     if (!this.session) return; // data ignorujeme, dokud operátor nezaložil hru
     const s = this.session;
-    if (this.broadcast.isFresh()) return; // WebSocket je primární; Riot API je fallback
+    if (s.status !== "WAITING_FOR_GAME" && s.status !== "CREATED" && s.status !== "LIVE") return;
+
+    // Event stream Live API (objektivy, pentakilly, first blood) se čte vždy.
+    // LeagueBroadcast je primární jen pro statistiky hráčů — objektivy
+    // s typem draka a krádeží ani pentakilly z něj nemáme.
+    const { newObjectives } = s.applyLiveEvents(data);
+    this.publishObjectives(newObjectives);
+
+    if (this.broadcast.isFresh()) {
+      if (newObjectives.length > 0) this.emitUpdate();
+      return; // hráče dodává WebSocket; Riot API je pro ně fallback
+    }
     if (s.status === "WAITING_FOR_GAME" || s.status === "CREATED") {
       log.info(`${s.meta.localGameId}: hra začala → LIVE`);
     }
@@ -139,7 +151,15 @@ export class GameManager extends EventEmitter {
     const wasWaiting = s.status !== "LIVE";
     s.applyBroadcast(snapshot);
     if (wasWaiting) log.info(`${s.meta.localGameId}: LeagueBroadcast detekoval hru → LIVE`);
-    this.publisher.publishSnapshot(snapshot, "league-broadcast");
+    this.publisher.publishSnapshot(
+      {
+        ...snapshot,
+        // Pentakilly a objektivy doplněné z Live API eventů.
+        players: s.currentLive?.players ?? snapshot.players,
+        objectives: s.currentLive?.objectives,
+      },
+      "league-broadcast",
+    );
     this.emitUpdate();
   }
 
@@ -156,6 +176,27 @@ export class GameManager extends EventEmitter {
       if (player) s.currentLive.firstBlood = { playerName: player.name, side: player.side };
     }
     this.emitUpdate();
+  }
+
+  /** Nově padlé objektivy jako diskrétní eventy živého streamu. */
+  private publishObjectives(kills: ObjectiveKill[]): void {
+    const s = this.session;
+    if (!s) return;
+    for (const kill of kills) {
+      const team = kill.side === s.meta.team1Side ? s.meta.team1 : s.meta.team2;
+      this.publisher.publishEvent(
+        {
+          type: "objective.kill",
+          capturedAt: new Date().toISOString(),
+          gameTime: kill.gameTime,
+          payload: { ...kill, team },
+        },
+        config.mock ? "mock" : "riot-live-api",
+      );
+      log.info(
+        `${s.meta.localGameId}: ${kill.kind}${kill.dragonType ? ` (${kill.dragonType})` : ""}${kill.stolen ? " ukradený" : ""} → ${team}`,
+      );
+    }
   }
 
   private onBroadcastGameStatus(status: GameState): void {
@@ -298,6 +339,7 @@ export class GameManager extends EventEmitter {
       teamKills: s.currentLive.teamKills,
       teamGold: s.currentLive.teamGold,
       firstBlood: s.currentLive.firstBlood,
+      objectives: s.currentLive.objectives,
     };
   }
 
@@ -330,6 +372,7 @@ export class GameManager extends EventEmitter {
       teamKills: { ...s.currentLive.teamKills },
       teamGold: { ...s.currentLive.teamGold },
       patch: null,
+      objectives: s.currentLive.objectives,
     };
   }
 

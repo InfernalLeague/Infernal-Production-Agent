@@ -5,10 +5,17 @@ import type {
   FinalLiveSnapshot,
   FirstBloodInfo,
   GameMeta,
+  GameObjectives,
   GameStatus,
   LivePlayerState,
 } from "../types.js";
 import { firstBlood, normalizePlayers, teamKills } from "../league/normalize.js";
+import {
+  championKey,
+  emptyObjectives,
+  objectivesFromEvents,
+  pentakillsByChampion,
+} from "../league/objectives.js";
 
 /**
  * GameSession (workflow §45): drží stav JEDNÉ hry a její live data v paměti.
@@ -25,7 +32,19 @@ export class GameSession {
     teamKills: { BLUE: number; RED: number };
     teamGold: { BLUE: number | null; RED: number | null };
     firstBlood: FirstBloodInfo | null;
+    objectives: GameObjectives;
   } | null = null;
+
+  /**
+   * Co se ví z event streamu Live API. Drží se mimo `currentLive`, protože
+   * LeagueBroadcast snapshot `currentLive` celý přepisuje, a objektivy ani
+   * pentakilly v něm nejsou.
+   */
+  private eventState: {
+    objectives: GameObjectives;
+    pentakills: Map<string, number>;
+    firstBlood: FirstBloodInfo | null;
+  } = { objectives: emptyObjectives(), pentakills: new Map(), firstBlood: null };
 
   /** Final live snapshot – po konci hry, už se NEMĚNÍ (workflow §16). */
   finalSnapshot: FinalLiveSnapshot | null = null;
@@ -51,16 +70,15 @@ export class GameSession {
 
   /** Zpracuje čerstvá live data (workflow §8–§12). */
   applyLive(data: AllGameData): void {
-    const players = normalizePlayers(data);
-    // First blood je jednorázová událost – jakmile ho jednou zachytíme, držíme ho
-    // (chrání proti výpadku/ořezu event streamu v pozdějším pollu).
-    const fb = this.currentLive?.firstBlood ?? firstBlood(data);
+    this.applyLiveEvents(data);
+    const players = this.withPentakills(normalizePlayers(data));
     this.currentLive = {
       durationSeconds: Math.round(data.gameData?.gameTime ?? 0),
       players,
       teamKills: teamKills(players),
       teamGold: { BLUE: null, RED: null },
-      firstBlood: fb,
+      firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
+      objectives: this.eventState.objectives,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
@@ -70,21 +88,62 @@ export class GameSession {
   /** LeagueBroadcast je primární bohatý zdroj (gold, itemy, rychlé změny). */
   applyBroadcast(snapshot: BroadcastGameSnapshot): void {
     const previousTime = this.currentLive?.durationSeconds ?? 0;
-    const previousPentas = new Map(this.currentLive?.players.map((p) => [p.name, p.pentakills]) ?? []);
     this.currentLive = {
       durationSeconds: Math.max(previousTime, Math.round(snapshot.gameTime)),
-      players: snapshot.players.map((p) => ({
-        ...p,
-        pentakills: Math.max(p.pentakills, previousPentas.get(p.name) ?? 0),
-        items: [...p.items],
-      })),
+      players: this.withPentakills(snapshot.players.map((p) => ({ ...p, items: [...p.items] }))),
       teamKills: { ...snapshot.teamKills },
       teamGold: { ...snapshot.teamGold },
-      firstBlood: this.currentLive?.firstBlood ?? null,
+      firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
+      objectives: this.eventState.objectives,
     };
     if (this.meta.status === "WAITING_FOR_GAME" || this.meta.status === "CREATED") {
       this.meta.status = "LIVE";
     }
+  }
+
+  /**
+   * Objektivy, pentakilly a first blood z event streamu Live API.
+   *
+   * Volá se při každém pollu Live API, i když hráče právě dodává
+   * LeagueBroadcast — dřív se v tu chvíli Live API zahodilo celé a pentakilly
+   * zůstávaly na nule. Vrací objektivy, které přibyly od minulého volání.
+   */
+  applyLiveEvents(data: AllGameData) {
+    const known = new Set(this.eventState.objectives.timeline.map((kill) => kill.eventId));
+    const objectives = objectivesFromEvents(data);
+    // Event stream se po reconnectu může vrátit kratší; už započtené
+    // objektivy se neztratí.
+    if (objectives.timeline.length >= this.eventState.objectives.timeline.length) {
+      this.eventState.objectives = objectives;
+    }
+
+    const pentakills = pentakillsByChampion(data);
+    for (const [key, count] of pentakills) {
+      this.eventState.pentakills.set(key, Math.max(count, this.eventState.pentakills.get(key) ?? 0));
+    }
+
+    // First blood je jednorázová událost – jakmile ho jednou zachytíme, držíme ho
+    // (chrání proti výpadku/ořezu event streamu v pozdějším pollu).
+    this.eventState.firstBlood ??= firstBlood(data);
+    if (this.currentLive) {
+      this.currentLive.objectives = this.eventState.objectives;
+      this.currentLive.firstBlood ??= this.eventState.firstBlood;
+      this.currentLive.players = this.withPentakills(this.currentLive.players);
+    }
+
+    return {
+      newObjectives: this.eventState.objectives.timeline.filter((kill) => !known.has(kill.eventId)),
+    };
+  }
+
+  private withPentakills(players: LivePlayerState[]): LivePlayerState[] {
+    return players.map((player) => ({
+      ...player,
+      pentakills: Math.max(
+        player.pentakills,
+        this.eventState.pentakills.get(championKey(player.side, player.championName)) ?? 0,
+      ),
+    }));
   }
 
   /** Konec hry (workflow §15–§16): zmrazí poslední validní live stav. */
@@ -99,6 +158,7 @@ export class GameSession {
         firstBlood: this.currentLive.firstBlood
           ? { ...this.currentLive.firstBlood }
           : null,
+        objectives: structuredClone(this.currentLive.objectives),
       };
     }
     this.meta.status = "GAME_ENDED";

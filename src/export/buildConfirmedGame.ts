@@ -7,6 +7,7 @@ import type {
   GameMeta,
   Side,
 } from "../types.js";
+import { emptyObjectives } from "../league/objectives.js";
 
 /**
  * Sestaví finální `ConfirmedGame` objekt (source of truth) z final live snapshotu.
@@ -25,12 +26,16 @@ export function buildConfirmedGame(
     side === meta.team1Side ? meta.team1 : meta.team2;
 
   const fb = snapshot.firstBlood;
+  // Recovery snapshot ze starší verze objektivy nemá.
+  const objectives = snapshot.objectives ?? emptyObjectives();
+  const teamOrNull = (side: Side | null): string | null => (side ? teamNameOf(side) : null);
 
   const teams: ConfirmedTeam[] = (["BLUE", "RED"] as Side[]).map((side) => ({
     name: teamNameOf(side),
     side,
     kills: snapshot.teamKills[side],
     gold: snapshot.teamGold[side],
+    objectives: objectives.teams[side],
   }));
 
   const players: ConfirmedPlayer[] = snapshot.players.map((p) => ({
@@ -73,12 +78,16 @@ export function buildConfirmedGame(
       winner,
       firstBloodPlayer: fb ? fb.playerName : null,
       firstBloodTeam: fb ? teamNameOf(fb.side) : null,
+      firstDragonTeam: teamOrNull(objectives.firstDragon),
+      firstBaronTeam: teamOrNull(objectives.firstBaron),
+      firstTowerTeam: teamOrNull(objectives.firstTower),
       createdAt: meta.createdAt,
       confirmedAt: new Date().toISOString(),
       status: "CONFIRMED",
     },
     teams,
     players,
+    objectiveTimeline: objectives.timeline.map((kill) => ({ ...kill, team: teamNameOf(kill.side) })),
     draft,
   };
 }

@@ -27,6 +27,9 @@ export class TxtExporter {
     L.push(`winner=${g.winner ?? ""}`);
     L.push(`first_blood_player=${g.firstBloodPlayer ?? ""}`);
     L.push(`first_blood_team=${g.firstBloodTeam ?? ""}`);
+    L.push(`first_dragon_team=${g.firstDragonTeam ?? ""}`);
+    L.push(`first_baron_team=${g.firstBaronTeam ?? ""}`);
+    L.push(`first_tower_team=${g.firstTowerTeam ?? ""}`);
     L.push(`created_at=${g.createdAt}`);
     L.push(`confirmed_at=${g.confirmedAt ?? ""}`);
     L.push("");
@@ -39,8 +42,29 @@ export class TxtExporter {
       L.push(`side=${t.side}`);
       L.push(`kills=${num(t.kills)}`);
       L.push(`gold=${num(t.gold)}`);
+      const o = t.objectives;
+      L.push(`dragons=${o.dragons}`);
+      for (const [type, count] of Object.entries(o.dragonTypes)) L.push(`dragon_${type}=${count}`);
+      L.push(`dragon_soul=${o.dragonSoul ?? ""}`);
+      L.push(`barons=${o.barons}`);
+      L.push(`heralds=${o.heralds}`);
+      L.push(`voidgrubs=${o.voidgrubs}`);
+      L.push(`atakhans=${o.atakhans}`);
+      L.push(`towers=${o.towers}`);
+      L.push(`inhibitors=${o.inhibitors}`);
       L.push("");
     });
+
+    if (game.objectiveTimeline.length > 0) {
+      L.push("OBJECTIVES");
+      // čas;objektiv;typ draka;tým;ukradený
+      game.objectiveTimeline.forEach((kill) => {
+        L.push(
+          `${formatDuration(kill.gameTime)};${kill.kind};${kill.dragonType ?? ""};${kill.team};${kill.stolen ? "stolen" : ""}`,
+        );
+      });
+      L.push("");
+    }
 
     game.players.forEach((p, i) => {
       L.push(`PLAYER${i + 1}`);

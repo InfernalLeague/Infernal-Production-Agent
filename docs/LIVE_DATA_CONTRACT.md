@@ -36,8 +36,17 @@ musí být idempotentní a vrátit 2xx. `sequence` určuje pořadí zpráv v jed
 - `game.created` / `game.ended` – lifecycle; konec obsahuje finální čas v sekundách,
 - `champion.kill` – vrah, oběť a asistující hráči,
 - `player.update` – K/D/A, nákup/prodej itemů a level-up,
-- `objective`, `team.update` – další LeagueBroadcast eventy,
-- `game.state` – K/D/A, CS, gold, itemy, level, vision, team kills/gold a game time.
+- `objective`, `team.update` – další LeagueBroadcast eventy (surový payload),
+- `objective.kill` – normalizovaný objektiv z Riot Live API: `kind`
+  (`dragon`, `baron`, `herald`, `voidgrub`, `atakhan`, `tower`, `inhibitor`),
+  `side` a `team`, `dragonType` (`fire`, `earth`, `water`, `air`, `hextech`,
+  `chemtech`, `elder`), `stolen`, `killer` a `eventId` z Live API,
+- `game.state` – K/D/A, CS, gold, itemy, level, vision, pentakilly, team kills/gold,
+  game time a `objectives` (součty za tým, dračí duše, první drak/baron/věž, timeline).
+
+Objektivy a pentakilly se berou z event streamu Riot Live API i ve chvíli, kdy
+statistiky hráčů dodává LeagueBroadcast. Pentakill se k hráči páruje přes stranu
+a championa, protože oba zdroje píšou jména hráčů různě.
 
 Diskrétní eventy se zapisují okamžitě. Snapshoty jsou omezené standardně na
 nejvýše 2 za sekundu (`LIVE_SNAPSHOT_INTERVAL_MS=500`), aby pasivní gold

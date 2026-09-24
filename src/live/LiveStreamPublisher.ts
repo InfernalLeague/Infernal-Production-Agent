@@ -70,6 +70,7 @@ export class LiveStreamPublisher extends EventEmitter {
       teamKills: snapshot.teamKills,
       teamGold: snapshot.teamGold,
       patch: snapshot.patch,
+      objectives: snapshot.objectives?.timeline.length ?? 0,
     });
     const now = Date.now();
     if (!force && (signature === this.lastSnapshotSignature || now - this.lastSnapshotAt < config.liveSnapshotMinIntervalMs)) {

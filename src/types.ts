@@ -109,6 +109,60 @@ export interface ConfirmedTeam {
   side: Side;
   kills: number | null;
   gold: number | null;   // až ze screenshotu (§22)
+  objectives: TeamObjectives;
+}
+
+// ---------------------------------------------------------------------------
+// Objektivy (Riot Live API eventy, viz league/objectives.ts)
+// ---------------------------------------------------------------------------
+
+export type DragonType = "fire" | "earth" | "water" | "air" | "hextech" | "chemtech" | "elder";
+
+export type ObjectiveKind =
+  | "dragon"
+  | "baron"
+  | "herald"
+  | "voidgrub"
+  | "atakhan"
+  | "tower"
+  | "inhibitor";
+
+/** Jeden zabitý objektiv nebo zbouraná budova. */
+export interface ObjectiveKill {
+  /** EventID z Live API — v rámci hry unikátní, slouží k deduplikaci. */
+  eventId: number;
+  kind: ObjectiveKind;
+  /** Strana, které se objektiv počítá. */
+  side: Side;
+  gameTime: number;
+  killer: string | null;
+  dragonType: DragonType | null;
+  stolen: boolean;
+  /** Jméno budovy u věží a inhibitorů (např. `Turret_T1_L_03_A`). */
+  structure?: string;
+}
+
+/** Součty objektivů jednoho týmu. */
+export interface TeamObjectives {
+  dragons: number;
+  dragonTypes: Record<DragonType, number>;
+  /** Typ dračí duše, pokud ji tým získal. */
+  dragonSoul: Exclude<DragonType, "elder"> | null;
+  barons: number;
+  heralds: number;
+  voidgrubs: number;
+  atakhans: number;
+  towers: number;
+  inhibitors: number;
+}
+
+export interface GameObjectives {
+  teams: Record<Side, TeamObjectives>;
+  /** Všechny objektivy v pořadí, jak padly. */
+  timeline: ObjectiveKill[];
+  firstDragon: Side | null;
+  firstBaron: Side | null;
+  firstTower: Side | null;
 }
 
 /**
@@ -127,12 +181,17 @@ export interface ConfirmedGame {
     winner: string | null;        // název vítězného týmu; v 1A zadá operátor
     firstBloodPlayer: string | null; // hráč, který udělal first blood (§ live events)
     firstBloodTeam: string | null;   // tým hráče s first blood
+    firstDragonTeam: string | null;
+    firstBaronTeam: string | null;
+    firstTowerTeam: string | null;
     createdAt: string;
     confirmedAt: string | null;
     status: GameStatus;
   };
   teams: ConfirmedTeam[];
   players: ConfirmedPlayer[];
+  /** Objektivy v pořadí, jak padly (strana → název týmu). */
+  objectiveTimeline: Array<ObjectiveKill & { team: string }>;
   draft: Draft | null; // bany + picky z champ selectu (pokud byl zachycen)
 }
 
@@ -267,6 +326,7 @@ export interface FinalLiveSnapshot {
   teamKills: { BLUE: number; RED: number };
   teamGold: { BLUE: number | null; RED: number | null };
   firstBlood: FirstBloodInfo | null;
+  objectives: GameObjectives;
 }
 
 /** Normalizovaný stav jednoho hráče z Live dat. */
@@ -314,10 +374,12 @@ export interface BroadcastGameSnapshot {
   teamKills: { BLUE: number; RED: number };
   teamGold: { BLUE: number | null; RED: number | null };
   patch: string | null;
+  /** Doplňuje GameManager z Live API eventů; LeagueBroadcast snapshot je nemá. */
+  objectives?: GameObjectives;
 }
 
 export interface BroadcastGameEvent {
-  type: "champion.kill" | "player.update" | "objective" | "team.update";
+  type: "champion.kill" | "player.update" | "objective" | "team.update" | "objective.kill";
   capturedAt: string;
   gameTime: number | null;
   payload: Record<string, unknown>;

@@ -152,6 +152,8 @@ input:focus, select:focus { outline: none; border-color: var(--flame); box-shado
 .sb-team-meta { display: flex; flex-direction: column; min-width: 0; }
 .sb-team.red .sb-team-meta { align-items: flex-end; }
 .sb-team-gold { color: var(--amber); font-size: 10px; font-variant-numeric: tabular-nums; }
+.sb-team-obj { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.sb-team.red .sb-team-obj { text-align: right; }
 .tag { font-family: var(--disp); font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 5px; }
 .sb-score { font-family: var(--disp); font-weight: 700; font-size: 30px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 12px; }
 .sb-score .s-blue { color: var(--blue-ink); }
