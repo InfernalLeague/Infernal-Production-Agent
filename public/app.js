@@ -66,9 +66,11 @@ $("createBtn").onclick = async () => {
     seriesFormat: $("seriesFormat").value,
     production: $("production").value,
     team1Side: $("team1Side").value,
+    web: selectedWebGame,
   });
   if (ok) {
     closeNewGame();
+    selectWebGame(null);
     toast(`Hra založena: ${data.meta.localGameId}`, "ok");
   } else {
     hint.textContent = data.error || "Chyba při zakládání hry.";
@@ -77,6 +79,118 @@ $("createBtn").onclick = async () => {
 };
 
 $("endBtn").onclick = () => post("/api/game/end");
+$("webResendBtn").onclick = () => post("/api/game/sync");
+
+// --- napojení na web ---------------------------------------------------------
+function openSettings() {
+  $("settingsModal").hidden = false;
+  $("settingsHint").className = "hint";
+  $("settingsHint").textContent = "";
+  fetch("/api/settings/web").then((r) => r.json()).then((w) => {
+    $("webUrl").value = w.webUrl || "";
+    $("webToken").value = "";
+    $("webToken").placeholder = w.hasToken ? `uložený token …${w.tokenHint} (nech prázdné, pokud neměníš)` : "ilpa_…";
+  });
+}
+function closeSettings() { $("settingsModal").hidden = true; }
+$("settingsBtn").onclick = openSettings;
+$("closeSettings").onclick = closeSettings;
+$("settingsModal").addEventListener("click", (e) => { if (e.target.id === "settingsModal") closeSettings(); });
+
+async function saveSettings() {
+  const body = { webUrl: $("webUrl").value };
+  if ($("webToken").value.trim()) body.token = $("webToken").value.trim();
+  const { ok } = await post("/api/settings/web", body);
+  return ok;
+}
+$("saveWebBtn").onclick = async () => {
+  const hint = $("settingsHint");
+  hint.className = "hint";
+  if (await saveSettings()) {
+    hint.textContent = "Uloženo.";
+    hint.classList.add("ok");
+    toast("Napojení na web uloženo", "ok");
+  } else {
+    hint.textContent = "Uložení selhalo.";
+    hint.classList.add("err");
+  }
+};
+$("testWebBtn").onclick = async () => {
+  const hint = $("settingsHint");
+  hint.className = "hint";
+  hint.textContent = "Zkouším…";
+  await saveSettings();
+  const res = await fetch("/api/web/schedule");
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    const games = (data.matches || []).reduce((n, m) => n + m.games.length, 0);
+    hint.textContent = `Spojení funguje — ${data.production === 2 ? "Kick" : "Twitch"}, dnes ${(data.matches || []).length} zápasů, ${games} her.`;
+    hint.classList.add("ok");
+  } else {
+    hint.textContent = data.error || "Spojení selhalo.";
+    hint.classList.add("err");
+  }
+};
+
+// Výběr hry z programu produkce (New Game).
+let selectedWebGame = null;
+const todayIso = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+$("webDate").value = todayIso();
+
+function selectWebGame(pick) {
+  selectedWebGame = pick ? { gameId: pick.game.id, matchId: pick.match.id, label: pick.label } : null;
+  document.querySelectorAll(".web-game").forEach((b) => b.classList.toggle("active", pick && b.dataset.game === pick.game.id));
+  const hint = $("webPickHint");
+  hint.className = "hint";
+  if (!pick) return;
+  const a = pick.match.teamA, b = pick.match.teamB;
+  const g = pick.game;
+  $("team1").value = a ? a.name : "";
+  $("team2").value = b ? b.name : "";
+  $("gameNumber").value = g.number;
+  const fmt = String(pick.match.format || "").toUpperCase();
+  if (["BO1", "BO3", "BO5"].includes(fmt)) $("seriesFormat").value = fmt;
+  // Strany podle hry na webu (Champion Draft / volba strany); jinak team A modrá.
+  $("team1Side").value = a && g.redTeamId === a.id ? "RED" : "BLUE";
+  hint.textContent = `Vybráno: ${pick.label}. Výsledek se po konci hry zapíše k téhle hře a rovnou potvrdí.`;
+  hint.classList.add("ok");
+}
+
+$("webLoadBtn").onclick = async () => {
+  const list = $("webGames");
+  const hint = $("webPickHint");
+  hint.className = "hint";
+  list.innerHTML = '<span class="dash-none">Načítám…</span>';
+  const res = await fetch(`/api/web/schedule?date=${encodeURIComponent($("webDate").value || todayIso())}`);
+  const data = await res.json().catch(() => ({}));
+  list.innerHTML = "";
+  if (!res.ok) {
+    hint.textContent = data.error || "Program se nepodařilo načíst.";
+    hint.classList.add("err");
+    return;
+  }
+  const matches = data.matches || [];
+  if (matches.length === 0) {
+    list.innerHTML = '<span class="dash-none">V tento den produkce nemá žádný zápas.</span>';
+    return;
+  }
+  for (const match of matches) {
+    const time = new Date(match.scheduledAt).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+    const names = `${match.teamA ? match.teamA.name : "?"} vs ${match.teamB ? match.teamB.name : "?"}`;
+    for (const game of match.games) {
+      const btn = document.createElement("button");
+      btn.className = "web-game";
+      btn.dataset.game = game.id;
+      const status = game.status === "confirmed"
+        ? (game.resultSource === "admin" ? "potvrzeno adminem" : "potvrzeno")
+        : game.status === "annulled" ? "anulováno" : "čeká";
+      btn.innerHTML = `<b>${esc(time)} · ${esc(names)}</b><span>Game ${game.number} · ${esc(status)}${match.published ? "" : " · nezveřejněný"}</span>`;
+      btn.disabled = game.status === "annulled" || game.resultSource === "admin";
+      btn.onclick = () => selectWebGame({ match, game, label: `${names} · Game ${game.number}` });
+      list.appendChild(btn);
+    }
+  }
+};
 
 $("exportBtn").onclick = async () => {
   const hint = $("exportHint");
@@ -162,6 +276,23 @@ function render(s) {
   deliveryNote.textContent = delivery.mode === "remote"
     ? `Database stream aktivní${delivery.pending ? ` · ${delivery.pending} čeká` : ""}`
     : "Live stream: local test log";
+
+  // stav odeslání výsledku na web
+  const webBox = $("webSync");
+  const sync = sess.webSync || { state: "idle" };
+  webBox.hidden = !m.web;
+  if (m.web) {
+    const text = {
+      idle: `Propojeno s „${m.web.label}“ — výsledek se zapíše po konci hry.`,
+      sending: "Zapisuji výsledek na web…",
+      ok: `✓ Zapsáno a potvrzeno na webu (revize ${sync.revision})${sync.unmatched ? ` · ${sync.unmatched} hráčů nespárováno — zkontroluj v adminu` : ""}`,
+      error: `Nezapsáno: ${sync.message || "chyba"}${sync.message && sync.message.startsWith("Chybí vítěz") ? "" : " — zkusím znovu za 30 s"}`,
+      rejected: `Web výsledek odmítl: ${sync.message || ""}`,
+    }[sync.state] || "—";
+    $("webSyncText").textContent = text;
+    $("webSyncText").className = "web-sync-text " + sync.state;
+    $("webResendBtn").hidden = !(sync.state === "error" || sync.state === "rejected");
+  }
 
   // fáze badge
   const badge = $("phaseBadge");

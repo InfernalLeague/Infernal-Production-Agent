@@ -13,6 +13,7 @@ import type {
   ObjectiveKill,
   ObjectiveKind,
   Side,
+  WebSyncStatus,
 } from "../types.js";
 import { firstBlood, normalizePlayers, teamKills } from "../league/normalize.js";
 import {
@@ -104,6 +105,9 @@ export class GameSession {
    * operátor. Odhad nikdy nepřepíše volbu operátora.
    */
   winnerSource: "auto" | "manual" | null = null;
+
+  /** Stav odeslání výsledku na web (jen u hry propojené s webem). */
+  webSync: WebSyncStatus = { state: "idle", message: null, revision: null, unmatched: null, at: null };
 
   /** Final live snapshot – po konci hry, už se NEMĚNÍ (workflow §16). */
   finalSnapshot: FinalLiveSnapshot | null = null;
@@ -385,6 +389,7 @@ export class GameSession {
       meta: this.meta,
       winner: this.winner,
       winnerSource: this.winnerSource,
+      webSync: this.webSync,
       live: this.currentLive,
       finalSnapshot: this.finalSnapshot,
       hasFinalSnapshot: this.finalSnapshot !== null,

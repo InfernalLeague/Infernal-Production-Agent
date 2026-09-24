@@ -44,6 +44,23 @@ export type ValueSource =
 /** Formát série. */
 export type SeriesFormat = "BO1" | "BO3" | "BO5" | string;
 
+/** Hra na webu, ke které agent zapisuje výsledek. */
+export interface WebGameLink {
+  gameId: string;
+  matchId: string;
+  /** Čitelný popis pro dashboard, např. „Ixtal vs Freljord · Game 2“. */
+  label: string;
+}
+
+/** Stav odeslání výsledku na web. */
+export interface WebSyncStatus {
+  state: "idle" | "sending" | "ok" | "error" | "rejected";
+  message: string | null;
+  revision: number | null;
+  unmatched: number | null;
+  at: string | null;
+}
+
 /** Parametry pro založení nové hry (workflow §5). */
 export interface CreateGameInput {
   team1: string;
@@ -53,6 +70,8 @@ export interface CreateGameInput {
   production?: string;
   /** Která z týmů je na modré straně. Default: team1. (Strany se v sérii mění.) */
   team1Side?: Side;
+  /** Hra na webu vybraná z programu produkce; bez ní se výsledek na web neposílá. */
+  web?: WebGameLink | null;
 }
 
 /** Interní identifikace hry (workflow §6). NEpoužíváme League Game ID. */
@@ -66,6 +85,7 @@ export interface GameMeta {
   team1Side: Side;
   createdAt: string;         // ISO
   status: GameStatus;
+  web?: WebGameLink | null;
 }
 
 /**

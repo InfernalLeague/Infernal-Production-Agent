@@ -18,6 +18,7 @@
       <span id="mockBadge" class="badge badge-mock" hidden>MOCK</span>
     </div>
     <div class="topbar-right">
+      <button id="settingsBtn" class="prod-pill settings-pill" title="Napojení na web">⚙ Web</button>
       <button id="prodSwitch" class="prod-pill" title="Změnit produkci">—</button>
     </div>
   </header>
@@ -157,6 +158,11 @@
             <span class="field-label">Winner <span id="winnerAuto" class="winner-auto" hidden>· odhad agenta, zkontroluj</span></span>
             <div id="winnerSeg" class="seg"></div>
           </div>
+          <div class="web-sync" id="webSync" hidden>
+            <span class="field-label">Web</span>
+            <span id="webSyncText" class="web-sync-text">—</span>
+            <button id="webResendBtn" class="btn btn-sm btn-ghost" hidden>Odeslat znovu</button>
+          </div>
           <div class="export-actions">
             <button id="endBtn" class="btn">Ukončit hru ručně</button>
             <button id="exportBtn" class="btn btn-primary">EXPORT .TXT</button>
@@ -208,6 +214,15 @@
         <h2>New Game</h2>
         <button id="closeNewGame" class="modal-close" aria-label="Zavřít">✕</button>
       </div>
+      <div class="web-pick">
+        <div class="web-pick-head">
+          <span class="field-label">Zápas z webu</span>
+          <input id="webDate" type="date" />
+          <button id="webLoadBtn" class="btn btn-sm">Načíst program</button>
+        </div>
+        <div id="webGames" class="web-games"></div>
+        <p class="hint" id="webPickHint">Vyber hru z programu produkce — výsledek se po konci hry sám zapíše na web. Bez výběru se hra na web neposílá.</p>
+      </div>
       <div class="form-grid">
         <label>Team 1 <input id="team1" value="Ixtal" /></label>
         <label>Team 2 <input id="team2" value="Freljord" /></label>
@@ -230,6 +245,28 @@
       <div class="modal-actions">
         <p class="hint" id="createHint"></p>
         <button id="createBtn" class="btn btn-primary">CREATE GAME</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEB SETTINGS MODAL -->
+  <div id="settingsModal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Napojení na web</h2>
+        <button id="closeSettings" class="modal-close" aria-label="Zavřít">✕</button>
+      </div>
+      <p class="hint">Token produkce vystaví admin v adminu webu: System / Integrations → Production Agent. Ukládá se jen v tomhle počítači.</p>
+      <div class="form-grid settings-grid">
+        <label>Adresa webu <input id="webUrl" placeholder="https://infernal-league.vercel.app" /></label>
+        <label>Token produkce <input id="webToken" type="password" autocomplete="off" placeholder="ilpa_…" /></label>
+      </div>
+      <div class="modal-actions">
+        <p class="hint" id="settingsHint"></p>
+        <div class="export-actions">
+          <button id="testWebBtn" class="btn btn-ghost">Otestovat</button>
+          <button id="saveWebBtn" class="btn btn-primary">Uložit</button>
+        </div>
       </div>
     </div>
   </div>

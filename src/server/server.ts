@@ -6,7 +6,9 @@ import { WebSocketServer, WebSocket } from "ws";
 import { config } from "../config.js";
 import { log } from "../util/logger.js";
 import type { GameManager } from "../core/GameManager.js";
-import type { CreateGameInput } from "../types.js";
+import type { CreateGameInput, WebGameLink } from "../types.js";
+import { fetchSchedule } from "../web/WebClient.js";
+import { publicWebSettings, saveWebSettings } from "../web/settings.js";
 
 /**
  * Lokální web server Fáze 1A:
@@ -45,6 +47,7 @@ export function startServer(manager: GameManager): void {
         seriesFormat: b.seriesFormat || "BO5",
         production: b.production,
         team1Side: b.team1Side === "RED" ? "RED" : "BLUE",
+        web: parseWebLink(b.web),
       });
       res.json({ ok: true, meta });
     } catch (err) {
@@ -60,6 +63,28 @@ export function startServer(manager: GameManager): void {
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
+  });
+
+  // Napojení na web: adresa a token produkce (token se nikdy nevrací celý).
+  app.get("/api/settings/web", (_req, res) => res.json(publicWebSettings()));
+  app.post("/api/settings/web", (req, res) => {
+    const body = req.body as { webUrl?: string; token?: string | null };
+    res.json(saveWebSettings({ webUrl: body.webUrl, token: body.token }));
+  });
+
+  // Program produkce z webu pro výběr hry v New Game.
+  app.get("/api/web/schedule", async (req, res) => {
+    try {
+      const date = typeof req.query.date === "string" ? req.query.date : undefined;
+      res.json(await fetchSchedule(date));
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/game/sync", (_req, res) => {
+    manager.resendResult();
+    res.json({ ok: true });
   });
 
   app.post("/api/game/end", (_req, res) => {
@@ -94,6 +119,13 @@ export function startServer(manager: GameManager): void {
     log.info(`Dashboard běží na  http://localhost:${config.port}`);
     if (config.mock) log.info("MOCK režim aktivní – simuluji hru Ixtal vs Freljord.");
   });
+}
+
+function parseWebLink(value: unknown): WebGameLink | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<WebGameLink>;
+  if (typeof v.gameId !== "string" || typeof v.matchId !== "string") return null;
+  return { gameId: v.gameId, matchId: v.matchId, label: typeof v.label === "string" ? v.label : "" };
 }
 
 /**

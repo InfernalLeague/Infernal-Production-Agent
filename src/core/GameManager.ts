@@ -24,6 +24,8 @@ import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
 import { exportConfirmedGame, type ExportMethod, type ExportResult } from "../export/exportConfirmedGame.js";
 import { LeagueBroadcastCollector } from "../live/LeagueBroadcastCollector.js";
 import { LiveStreamPublisher } from "../live/LiveStreamPublisher.js";
+import { submitResult, WebApiError } from "../web/WebClient.js";
+import { publicWebSettings } from "../web/settings.js";
 
 /**
  * GameManager: orchestrátor Fáze 1A.
@@ -88,6 +90,7 @@ export class GameManager extends EventEmitter {
       team1Side,
       createdAt,
       status: "WAITING_FOR_GAME",
+      web: input.web ?? null,
     };
     const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber, meta.localGameId);
     fs.mkdirSync(folder, { recursive: true });
@@ -105,6 +108,15 @@ export class GameManager extends EventEmitter {
     }
     this.session.setWinner(name);
     this.emitUpdate();
+    // Změna vítěze po konci hry jde na web znovu (produkce opravuje výsledek).
+    if (this.session.status === "GAME_ENDED" || this.session.status === "EXPORTED") {
+      void this.syncResult("změna vítěze");
+    }
+  }
+
+  /** Ruční opětovné odeslání výsledku na web (tlačítko v dashboardu). */
+  resendResult(): void {
+    void this.syncResult("ručně");
   }
 
   /** Ruční ukončení hry operátorem (kdyby autodetekce nestačila). */
@@ -334,6 +346,7 @@ export class GameManager extends EventEmitter {
     if (finalGold) this.publishGoldSample(finalGold);
     log.info(`${this.session.meta.localGameId}: GAME ENDED (${reason})`);
     this.suggestWinner(this.session);
+    void this.syncResult("konec hry");
     if (this.session.finalSnapshot) {
       writeJsonAtomic(path.join(this.session.folder, "live_final.json"), this.session.finalSnapshot);
     }
@@ -343,6 +356,65 @@ export class GameManager extends EventEmitter {
       this.transportSnapshot(this.session) ?? undefined,
     );
     this.emitUpdate();
+  }
+
+  private syncTimer: NodeJS.Timeout | null = null;
+  private syncAgain = false;
+
+  /**
+   * Výsledek hry na web: zapíše se a hra se na webu rovnou potvrdí.
+   *
+   * Posílá se po konci hry a po každé změně vítěze. Když web neodpovídá,
+   * zkouší se to znovu každých 30 s. Když výsledek odmítne (cizí produkce,
+   * výsledek už převzal admin…), opakování nepomůže — dashboard ukáže
+   * hlášku z webu a operátor rozhodne.
+   */
+  private async syncResult(reason: string): Promise<void> {
+    const s = this.session;
+    if (!s?.meta.web || !s.finalSnapshot) return;
+    if (s.webSync.state === "sending") {
+      this.syncAgain = true;
+      return;
+    }
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.syncTimer = null;
+
+    if (!s.winner) {
+      s.webSync = { ...s.webSync, state: "error", message: "Chybí vítěz — zvol ho a výsledek se odešle.", at: new Date().toISOString() };
+      this.emitUpdate();
+      return;
+    }
+
+    s.webSync = { ...s.webSync, state: "sending", message: null };
+    this.emitUpdate();
+    const confirmed = buildConfirmedGame(s.meta, s.finalSnapshot, s.winner, s.winnerSource);
+    writeJsonAtomic(path.join(s.folder, "confirmed.json"), confirmed);
+
+    try {
+      const result = await submitResult(s.meta.web.gameId, confirmed);
+      s.webSync = {
+        state: "ok",
+        message: null,
+        revision: result.revision,
+        unmatched: Array.isArray(result.unmatched) ? result.unmatched.length : 0,
+        at: new Date().toISOString(),
+      };
+      log.info(`${s.meta.localGameId}: výsledek zapsán na web (${reason}, revize ${result.revision}, spárováno ${result.matched})`);
+    } catch (error) {
+      const retryable = error instanceof WebApiError ? error.retryable : true;
+      const message = error instanceof Error ? error.message : String(error);
+      s.webSync = { ...s.webSync, state: retryable ? "error" : "rejected", message, at: new Date().toISOString() };
+      log.warn(`${s.meta.localGameId}: výsledek se na web nezapsal (${reason}): ${message}`);
+      if (retryable) {
+        this.syncTimer = setTimeout(() => void this.syncResult("opakování"), 30_000);
+      }
+    }
+    this.emitUpdate();
+
+    if (this.syncAgain) {
+      this.syncAgain = false;
+      void this.syncResult("čekající změna");
+    }
   }
 
   /**
@@ -430,6 +502,7 @@ export class GameManager extends EventEmitter {
       leagueBroadcast: this.broadcast.getStatus(),
       liveDelivery: this.publisher.getStatus(),
       session: this.session ? this.session.toClient() : null,
+      web: publicWebSettings(),
     };
   }
 

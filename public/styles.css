@@ -512,3 +512,26 @@ body[data-prod="twitch"] .brand-logo, body[data-prod="kick"] .brand-logo { filte
 .gdiff { display: block; font-size: 11px; font-weight: 700; color: var(--faint); }
 .gdiff.pos { color: var(--green); }
 .gdiff.neg { color: var(--red); }
+
+/* ---------- napojení na web ---------- */
+.settings-pill { margin-right: 8px; }
+.settings-grid { grid-template-columns: 1fr; }
+.web-pick { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.web-pick-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.web-pick-head input { width: auto; }
+.web-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.web-game { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border2); background: var(--inset); color: var(--text); cursor: pointer; font: inherit; }
+.web-game b { font-family: var(--disp); font-weight: 700; letter-spacing: 0.02em; }
+.web-game span { font-size: 12px; color: var(--muted); }
+.web-game:hover:not(:disabled) { border-color: var(--border-accent); }
+.web-game.active { border-color: var(--flame2); box-shadow: 0 0 0 1px var(--flame2) inset; }
+.web-game:disabled { opacity: 0.45; cursor: not-allowed; }
+.web-sync { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+.web-sync-text { font-size: 13px; color: var(--muted); }
+.web-sync-text.ok { color: var(--green); }
+.web-sync-text.error { color: var(--amber); }
+.web-sync-text.rejected { color: var(--red); }
+.web-sync-text.sending { color: var(--ember-text); }
+
+/* Popis pod nadpisem okna (nastavení, výběr produkce) nesmí lepit na pole. */
+.modal-card > .hint { margin-bottom: 14px; }
