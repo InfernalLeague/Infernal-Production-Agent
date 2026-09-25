@@ -112,6 +112,8 @@ export interface ConfirmedPlayer {
   /** Killy bez asistence spoluhráčů (z Live API, jen od připojení spectatoru). */
   soloKills: number;
   items: number[];               // itemID list z Live
+  /** Itemy po slotech inventáře (9 míst, 0 = prázdno); viz league/itemSlots.ts. */
+  itemSlots?: number[];
   /** Pořadí v týmu podle LeagueBroadcastu = role (0 top … 4 support). */
   slot: number | null;
   /** Champion protivníka na stejné roli (stejný slot na druhé straně). */
@@ -345,6 +347,8 @@ export interface LivePlayerState {
   /** Killy bez asistence spoluhráčů. */
   soloKills: number;
   items: number[];
+  /** Itemy po slotech inventáře (9 míst, 0 = prázdno); viz league/itemSlots.ts. */
+  itemSlots?: number[];
   /** Pořadí hráče v týmu (0–4), u LeagueBroadcastu odpovídá roli. */
   slot?: number;
 }

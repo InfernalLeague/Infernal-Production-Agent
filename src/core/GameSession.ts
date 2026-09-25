@@ -154,7 +154,9 @@ export class GameSession {
     const previousTime = this.currentLive?.durationSeconds ?? 0;
     this.currentLive = {
       durationSeconds: Math.max(previousTime, Math.round(snapshot.gameTime)),
-      players: this.withPentakills(snapshot.players.map((p) => ({ ...p, items: [...p.items] }))),
+      players: this.withPentakills(
+        snapshot.players.map((p) => ({ ...p, items: [...p.items], itemSlots: p.itemSlots && [...p.itemSlots] })),
+      ),
       teamKills: { ...snapshot.teamKills },
       teamGold: { ...snapshot.teamGold },
       firstBlood: this.currentLive?.firstBlood ?? this.eventState.firstBlood,
@@ -363,7 +365,11 @@ export class GameSession {
       this.finalSnapshot = {
         capturedAt: new Date().toISOString(),
         durationSeconds: this.currentLive.durationSeconds,
-        players: this.currentLive.players.map((p) => ({ ...p, items: [...p.items] })),
+        players: this.currentLive.players.map((p) => ({
+          ...p,
+          items: [...p.items],
+          itemSlots: p.itemSlots && [...p.itemSlots],
+        })),
         teamKills: { ...this.currentLive.teamKills },
         teamGold: { ...this.currentLive.teamGold },
         firstBlood: this.currentLive.firstBlood

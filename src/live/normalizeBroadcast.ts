@@ -7,6 +7,7 @@ import type {
   simpleChampionData,
 } from "@bluebottle_gg/league-broadcast-client";
 import type { BroadcastGameEvent, BroadcastGameSnapshot, LivePlayerState, Side } from "../types.js";
+import { toItemSlots } from "../league/itemSlots.js";
 
 function roundOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
@@ -43,6 +44,7 @@ export function normalizeBroadcastSnapshot(data: ingameFrontendData): BroadcastG
           .filter((item) => item.id > 0 && item.count !== 0)
           .sort((a, b) => a.slot - b.slot)
           .map((item) => item.id),
+        itemSlots: toItemSlots(player.items ?? []),
         slot,
       });
     });
