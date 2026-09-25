@@ -1,6 +1,6 @@
 {
   "name": "infernal-production-agent",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Infernal League Production Agent – sběr, live transport a export dat ze spectatované LoL hry.",
   "type": "module",
   "main": "electron/main.mjs",
