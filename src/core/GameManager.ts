@@ -24,6 +24,7 @@ import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
 import { exportConfirmedGame, type ExportMethod, type ExportResult } from "../export/exportConfirmedGame.js";
 import { LeagueBroadcastCollector } from "../live/LeagueBroadcastCollector.js";
 import { LiveStreamPublisher } from "../live/LiveStreamPublisher.js";
+import type { DamageField, DamageProbe } from "../live/damageProbe.js";
 import { submitResult, WebApiError } from "../web/WebClient.js";
 import { publicWebSettings } from "../web/settings.js";
 
@@ -55,6 +56,7 @@ export class GameManager extends EventEmitter {
     this.broadcast.on("gameEvent", (event: BroadcastGameEvent) => this.onBroadcastEvent(event));
     this.broadcast.on("gameStatus", (status: GameState) => this.onBroadcastGameStatus(status));
     this.broadcast.on("status", () => this.emitUpdate());
+    this.broadcast.on("damage", (damage: DamageProbe) => this.onBroadcastDamage(damage));
     this.publisher.on("status", () => this.emitUpdate());
   }
 
@@ -95,6 +97,7 @@ export class GameManager extends EventEmitter {
     const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber, meta.localGameId);
     fs.mkdirSync(folder, { recursive: true });
     this.session = new GameSession(meta, folder);
+    this.damage = { fields: new Set(), samples: 0, lastWrittenAt: 0 };
     this.publisher.beginGame(meta, folder);
     log.info(`Nová hra: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`);
     this.emitUpdate();
@@ -348,6 +351,7 @@ export class GameManager extends EventEmitter {
     const finalGold = this.session.endGame();
     if (finalGold) this.publishGoldSample(finalGold);
     log.info(`${this.session.meta.localGameId}: GAME ENDED (${reason})`);
+    this.logDamageSummary(this.session);
     this.suggestWinner(this.session);
     void this.syncResult("konec hry");
     if (this.session.finalSnapshot) {
@@ -362,6 +366,52 @@ export class GameManager extends EventEmitter {
   }
 
   private syncTimer: NodeJS.Timeout | null = null;
+
+  // --- diagnostika damage z LeagueBroadcastu (0.1.16) -----------------------
+
+  /** Co z damage během aktuální hry přišlo; vzorky jdou do lb_damage.jsonl. */
+  private damage: { fields: Set<DamageField>; samples: number; lastWrittenAt: number } = {
+    fields: new Set(),
+    samples: 0,
+    lastWrittenAt: 0,
+  };
+
+  /**
+   * Vzorek damage z LeagueBroadcastu ke hře: nejvýš jednou za 30 s, plus
+   * vždy, když přijde pole, které v téhle hře ještě nebylo. Jen záznam pro
+   * ověření, co LeagueBroadcast posílá; na výsledek hry to vliv nemá.
+   */
+  private onBroadcastDamage(damage: DamageProbe): void {
+    const s = this.session;
+    if (!s || s.status !== "LIVE") return;
+    const newField = damage.fields.some((field) => !this.damage.fields.has(field));
+    if (!newField && Date.now() - this.damage.lastWrittenAt < 30_000) return;
+
+    for (const field of damage.fields) this.damage.fields.add(field);
+    this.damage.samples += 1;
+    this.damage.lastWrittenAt = Date.now();
+    try {
+      fs.appendFileSync(
+        path.join(s.folder, "lb_damage.jsonl"),
+        JSON.stringify({ capturedAt: new Date().toISOString(), ...damage }) + "\n",
+        "utf8",
+      );
+    } catch (error) {
+      log.warn(`${s.meta.localGameId}: vzorek damage se nezapsal: ${(error as Error).message}`);
+    }
+  }
+
+  private logDamageSummary(s: GameSession): void {
+    if (this.damage.samples === 0) {
+      log.info(`${s.meta.localGameId}: LeagueBroadcast během hry žádná damage data neposlal.`);
+      return;
+    }
+    log.info(
+      `${s.meta.localGameId}: damage z LeagueBroadcastu: ${[...this.damage.fields].join(", ")} ` +
+        `(${this.damage.samples} vzorků v lb_damage.jsonl).`,
+    );
+  }
+
   private syncAgain = false;
 
   /**

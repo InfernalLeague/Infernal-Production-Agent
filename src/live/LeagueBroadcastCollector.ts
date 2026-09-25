@@ -7,6 +7,7 @@ import {
 } from "@bluebottle_gg/league-broadcast-client";
 import type { BroadcastGameEvent, BroadcastGameSnapshot } from "../types.js";
 import { log } from "../util/logger.js";
+import { damageProbe, type DamageField } from "./damageProbe.js";
 import {
   normalizeBroadcastSnapshot,
   normalizeKillEvent,
@@ -51,6 +52,8 @@ export class LeagueBroadcastCollector extends EventEmitter {
   private client: LeagueBroadcastClient | null = null;
   private latestSnapshot: BroadcastGameSnapshot | null = null;
   private status: LeagueBroadcastStatus;
+  /** Damage pole, která LeagueBroadcast od startu Agenta aspoň jednou poslal. */
+  private damageFieldsSeen = new Set<DamageField>();
 
   constructor(
     private readonly host: string,
@@ -102,6 +105,16 @@ export class LeagueBroadcastCollector extends EventEmitter {
       this.emitStatus();
     });
     this.client.onIngameStateUpdate((data: ingameFrontendData) => {
+      const damage = damageProbe(data);
+      if (damage) {
+        for (const field of damage.fields) {
+          if (this.damageFieldsSeen.has(field)) continue;
+          this.damageFieldsSeen.add(field);
+          log.info(`LeagueBroadcast poprvé poslal damage: ${field} (herní čas ${damage.gameTime} s).`);
+        }
+        this.emit("damage", damage);
+      }
+
       const snapshot = normalizeBroadcastSnapshot(data);
       if (!snapshot) return;
       this.latestSnapshot = snapshot;
