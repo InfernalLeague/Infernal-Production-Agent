@@ -22,6 +22,7 @@ import {
   emptyObjectives,
   objectivesFromBroadcastEvent,
   EPIC_KINDS,
+  isNexusTurret,
   objectivesFromEvents,
   pentakillsByChampion,
   soloKillsByChampion,
@@ -285,17 +286,21 @@ export class GameSession {
   }
 
   /**
-   * Odhad vítěze po konci hry: strana, které se počítala poslední zbouraná
-   * budova v poslední minutě a půl hry. Nexus Live API nehlásí, ale před ním
-   * padají nexusové věže a inhibitor vítězů. `GameEnd.Result` je ve
-   * spectatoru k ničemu — vztahuje se k „vlastnímu“ hráči, který tu není.
+   * Odhad vítěze po konci hry z budov zbouraných v poslední minutě a půl.
+   * Nexus Live API nehlásí, ale před ním padají nexusové věže poraženého.
+   * Když v tom okně padla nexusová věž, rozhoduje strana, která ji zbořila:
+   * poražený může těsně před koncem ještě zbořit věž ve splitpushi (stalo se
+   * na živé hře 25. 9. 2026). Jinak platí poslední zbouraná budova.
+   * `GameEnd.Result` je ve spectatoru k ničemu — vztahuje se k „vlastnímu“
+   * hráči, který tu není.
    */
   suggestWinnerSide(): Side | null {
     const end = this.currentLive?.durationSeconds ?? 0;
     const structures = this.objectives().timeline.filter(
       (kill) => STRUCTURE_KINDS.includes(kill.kind) && kill.gameTime >= end - 90,
     );
-    return structures.at(-1)?.side ?? null;
+    const nexusTurrets = structures.filter((kill) => isNexusTurret(kill.structure));
+    return (nexusTurrets.at(-1) ?? structures.at(-1))?.side ?? null;
   }
 
   /**

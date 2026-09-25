@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AllGameData, RiotEvent, RiotPlayer } from "../types.js";
 import { GameSession } from "../core/GameSession.js";
-import { championKey, objectivesFromEvents, pentakillsByChampion, soloKillsByChampion } from "./objectives.js";
+import { championKey, objectivesFromEvents, pentakillsByChampion, soloKillsByChampion, isNexusTurret } from "./objectives.js";
 import { buildConfirmedGame } from "../export/buildConfirmedGame.js";
 import type { BroadcastGameSnapshot, LivePlayerState } from "../types.js";
 
@@ -326,4 +326,13 @@ test("solo kill = kill bez asistence, zabiják musí být hráč; páruje se př
   session.endGame();
   const confirmed = buildConfirmedGame(session.meta, session.finalSnapshot!, null);
   assert.equal(confirmed.players.find((player) => player.championName === "Vi")?.soloKills, 1);
+});
+
+test("nexusová věž se pozná podle jména v novém i starém tvaru", () => {
+  assert.equal(isNexusTurret("Turret_TChaos_L1_P5_342097928_0"), true);
+  assert.equal(isNexusTurret("Turret_TChaos_L1_P4_392430785_0"), true);
+  assert.equal(isNexusTurret("Turret_T2_C_01_A"), true);
+  assert.equal(isNexusTurret("Turret_TOrder_L0_P2_3812066093_0"), false);
+  assert.equal(isNexusTurret("Turret_TChaos_L1_P1_2220646803_0"), false);
+  assert.equal(isNexusTurret(undefined), false);
 });

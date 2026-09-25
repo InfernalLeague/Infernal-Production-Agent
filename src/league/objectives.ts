@@ -107,6 +107,16 @@ export function structureSide(name: unknown): Side | null {
   return null;
 }
 
+/**
+ * Nexusová věž: v současném tvaru `Turret_TChaos_L1_P4/P5_…` (ověřeno na
+ * živé hře 25. 9. 2026 — padly těsně před koncem), ve starším
+ * `Turret_T2_C_01/02_A`.
+ */
+export function isNexusTurret(name: unknown): boolean {
+  if (typeof name !== "string") return false;
+  return /_L1_P[45](_|$)/i.test(name) || /_C_0[12]_/i.test(name);
+}
+
 function isStolen(value: unknown): boolean {
   return value === true || value === "True" || value === "true";
 }
