@@ -48,11 +48,31 @@ export function firstBlood(data: AllGameData): FirstBloodInfo | null {
   return { playerName: playerName(player), side: sideOf(player.team) };
 }
 
+const POSITION_SLOTS: Record<string, number> = { TOP: 0, JUNGLE: 1, MIDDLE: 2, BOTTOM: 3, UTILITY: 4 };
+
+/**
+ * Pozice hráče v týmu (0 top … 4 support). Live API ji posílá v `position`;
+ * když u některého hráče strany chybí nebo se opakuje, platí pořadí
+ * v `allPlayers`, jinak by dva hráči dostali stejnou roli.
+ */
+function playerSlots(players: RiotPlayer[]): number[] {
+  const bySide = { BLUE: [] as number[], RED: [] as number[] };
+  players.forEach((p, i) => bySide[sideOf(p.team)].push(i));
+
+  const slots: number[] = [];
+  for (const indexes of Object.values(bySide)) {
+    const positions = indexes.map((i) => POSITION_SLOTS[(players[i].position ?? "").toUpperCase()]);
+    const valid = positions.every((slot) => slot !== undefined) && new Set(positions).size === positions.length;
+    indexes.forEach((i, order) => (slots[i] = valid ? positions[order] : order));
+  }
+  return slots;
+}
+
 /** Normalizuje surová Live data na seznam interních stavů hráčů. */
 export function normalizePlayers(data: AllGameData): LivePlayerState[] {
   const pentas = pentakillsByPlayer(data);
-  const slots = { BLUE: 0, RED: 0 };
-  return (data.allPlayers ?? []).map((p) => {
+  const slots = playerSlots(data.allPlayers ?? []);
+  return (data.allPlayers ?? []).map((p, index) => {
     const name = playerName(p);
     const side = sideOf(p.team);
     return {
@@ -69,7 +89,7 @@ export function normalizePlayers(data: AllGameData): LivePlayerState[] {
       pentakills: pentas.get(name) ?? 0,
       soloKills: 0, // doplní GameSession z event streamu
       items: (p.items ?? []).map((it) => it.itemID),
-      slot: slots[side]++,
+      slot: slots[index],
     };
   });
 }

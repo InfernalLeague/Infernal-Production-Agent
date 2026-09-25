@@ -106,10 +106,13 @@ export class GameManager extends EventEmitter {
     if (name !== null && name !== this.session.meta.team1 && name !== this.session.meta.team2) {
       throw new Error("Vítěz musí být jeden z týmů aktuální hry.");
     }
+    const changed = name !== this.session.winner;
     this.session.setWinner(name);
     this.emitUpdate();
     // Změna vítěze po konci hry jde na web znovu (produkce opravuje výsledek).
-    if (this.session.status === "GAME_ENDED" || this.session.status === "EXPORTED") {
+    // Potvrzení téhož vítěze (i odhadnutého) se neposílá, web by ho zapsal
+    // jako opravu. Znovu odeslat jde tlačítkem „Odeslat znovu“.
+    if (changed && (this.session.status === "GAME_ENDED" || this.session.status === "EXPORTED")) {
       void this.syncResult("změna vítěze");
     }
   }
