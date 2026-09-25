@@ -114,6 +114,8 @@ export interface ConfirmedPlayer {
   items: number[];               // itemID list z Live
   /** Itemy po slotech inventáře (9 míst, 0 = prázdno); viz league/itemSlots.ts. */
   itemSlots?: number[];
+  /** Summoner spelly (D, F) z Live API; viz league/summonerSpells.ts. */
+  summonerSpells?: string[];
   /** Pořadí v týmu podle LeagueBroadcastu = role (0 top … 4 support). */
   slot: number | null;
   /** Champion protivníka na stejné roli (stejný slot na druhé straně). */
@@ -289,6 +291,10 @@ export interface RiotPlayer {
   scores: RiotScores;
   items: RiotItem[];
   isDead?: boolean;
+  summonerSpells?: {
+    summonerSpellOne?: { displayName?: string; rawDisplayName?: string };
+    summonerSpellTwo?: { displayName?: string; rawDisplayName?: string };
+  };
 }
 
 export interface RiotEvent {
@@ -349,6 +355,8 @@ export interface LivePlayerState {
   items: number[];
   /** Itemy po slotech inventáře (9 míst, 0 = prázdno); viz league/itemSlots.ts. */
   itemSlots?: number[];
+  /** Summoner spelly (D, F) z Live API; viz league/summonerSpells.ts. */
+  summonerSpells?: string[];
   /** Pořadí hráče v týmu (0–4), u LeagueBroadcastu odpovídá roli. */
   slot?: number;
 }

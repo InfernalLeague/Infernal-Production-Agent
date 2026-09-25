@@ -70,6 +70,7 @@ export function buildConfirmedGame(
       soloKills: p.soloKills ?? 0,
       items: p.items,
       itemSlots: p.itemSlots,
+      summonerSpells: p.summonerSpells,
       slot,
       opponentChampion: opponent?.championName ?? null,
       goldDiffAt14:

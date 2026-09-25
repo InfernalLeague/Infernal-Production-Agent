@@ -16,6 +16,7 @@ import type {
   WebSyncStatus,
 } from "../types.js";
 import { firstBlood, normalizePlayers, teamKills } from "../league/normalize.js";
+import { summonerSpellsByChampion } from "../league/summonerSpells.js";
 import {
   championKey,
   emptyObjectives,
@@ -63,8 +64,16 @@ export class GameSession {
     objectives: GameObjectives;
     pentakills: Map<string, number>;
     soloKills: Map<string, number>;
+    /** Summoner spelly z Live API; LeagueBroadcast je nemá. */
+    summonerSpells: Map<string, string[]>;
     firstBlood: FirstBloodInfo | null;
-  } = { objectives: emptyObjectives(), pentakills: new Map(), soloKills: new Map(), firstBlood: null };
+  } = {
+    objectives: emptyObjectives(),
+    pentakills: new Map(),
+    soloKills: new Map(),
+    summonerSpells: new Map(),
+    firstBlood: null,
+  };
 
   /** Objektivy z LeagueBroadcast eventů — záloha, když Live API žádné nehlásí. */
   private broadcastKills: ObjectiveKill[] = [];
@@ -311,6 +320,9 @@ export class GameSession {
    */
   applyLiveEvents(data: AllGameData) {
     if ((data.events?.Events ?? []).length > 0) this.riotEventsSeen = true;
+    // Spelly se během hry mění jen výjimečně (Unleashed Teleport, Smite),
+    // bere se vždy poslední stav z Live API.
+    for (const [key, spells] of summonerSpellsByChampion(data)) this.eventState.summonerSpells.set(key, spells);
     const known = new Set(this.eventState.objectives.timeline.map((kill) => kill.eventId));
     const objectives = objectivesFromEvents(data);
     // Event stream se po reconnectu může vrátit kratší; už započtené
@@ -345,7 +357,7 @@ export class GameSession {
     };
   }
 
-  /** Doplní hráčům pentakilly a solo killy z event streamu Live API. */
+  /** Doplní hráčům pentakilly, solo killy a summoner spelly z Live API. */
   private withPentakills(players: LivePlayerState[]): LivePlayerState[] {
     return players.map((player) => {
       const key = championKey(player.side, player.championName);
@@ -353,6 +365,7 @@ export class GameSession {
         ...player,
         pentakills: Math.max(player.pentakills, this.eventState.pentakills.get(key) ?? 0),
         soloKills: Math.max(player.soloKills ?? 0, this.eventState.soloKills.get(key) ?? 0),
+        summonerSpells: this.eventState.summonerSpells.get(key) ?? player.summonerSpells,
       };
     });
   }

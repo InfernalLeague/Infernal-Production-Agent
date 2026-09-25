@@ -11,7 +11,7 @@
     "start": "tsx src/index.ts",
     "mock": "tsx src/index.ts --mock",
     "build": "tsc",
-    "test": "tsx --test src/live/normalizeBroadcast.test.ts src/live/LeagueBroadcastCollector.test.ts src/league/objectives.test.ts src/live/damageProbe.test.ts src/league/itemSlots.test.ts",
+    "test": "tsx --test src/live/normalizeBroadcast.test.ts src/live/LeagueBroadcastCollector.test.ts src/league/objectives.test.ts src/live/damageProbe.test.ts src/league/itemSlots.test.ts src/league/summonerSpells.test.ts",
     "build:overlays": "node scripts/build-overlays.mjs",
     "build:icon": "node scripts/make-icon.mjs",
     "build:all": "npm run build && npm run build:overlays && npm run build:icon",

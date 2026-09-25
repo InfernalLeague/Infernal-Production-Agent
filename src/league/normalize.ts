@@ -1,5 +1,6 @@
 import type { AllGameData, FirstBloodInfo, LivePlayerState, RiotPlayer, Side } from "../types.js";
 import { toItemSlots } from "./itemSlots.js";
+import { summonerSpellsOf } from "./summonerSpells.js";
 
 /** ORDER = modrá strana, CHAOS = červená (Live Client API konvence). */
 export function sideOf(team: RiotPlayer["team"]): Side {
@@ -91,6 +92,7 @@ export function normalizePlayers(data: AllGameData): LivePlayerState[] {
       soloKills: 0, // doplní GameSession z event streamu
       items: (p.items ?? []).map((it) => it.itemID),
       itemSlots: toItemSlots((p.items ?? []).map((it) => ({ id: it.itemID, slot: it.slot, count: it.count }))),
+      summonerSpells: summonerSpellsOf(p),
       slot: slots[index],
     };
   });
