@@ -283,7 +283,11 @@ function render(s) {
   webBox.hidden = !m.web;
   if (m.web) {
     const text = {
-      idle: `Propojeno s „${m.web.label}“ — výsledek se zapíše po konci hry.`,
+      idle: m.status === "LIVE" && s.liveWeb && s.liveWeb.state !== "idle"
+        ? (s.liveWeb.state === "ok"
+          ? `● Živě na webu (${fmtClock(s.liveWeb.gameTime || 0)}) — výsledek se zapíše po konci hry.`
+          : `Živý stav se na web nezapsal: ${s.liveWeb.message || "chyba"} — zkouším dál.`)
+        : `Propojeno s „${m.web.label}“ — výsledek se zapíše po konci hry.`,
       sending: "Zapisuji výsledek na web…",
       ok: `✓ Zapsáno a potvrzeno na webu (revize ${sync.revision})${sync.unmatched ? ` · ${sync.unmatched} hráčů nespárováno — zkontroluj v adminu` : ""}`,
       error: `Nezapsáno: ${sync.message || "chyba"}${sync.message && sync.message.startsWith("Chybí vítěz") ? "" : " — zkusím znovu za 30 s"}`,

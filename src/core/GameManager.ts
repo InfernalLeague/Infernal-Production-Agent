@@ -25,8 +25,11 @@ import { exportConfirmedGame, type ExportMethod, type ExportResult } from "../ex
 import { LeagueBroadcastCollector } from "../live/LeagueBroadcastCollector.js";
 import { LiveStreamPublisher } from "../live/LiveStreamPublisher.js";
 import type { DamageField, DamageProbe } from "../live/damageProbe.js";
-import { submitResult, WebApiError } from "../web/WebClient.js";
-import { publicWebSettings } from "../web/settings.js";
+
+/** Jak často jde živý stav běžící hry na web. */
+const LIVE_WEB_INTERVAL_MS = 5000;
+import { submitLive, submitResult, WebApiError } from "../web/WebClient.js";
+import { loadWebSettings, publicWebSettings } from "../web/settings.js";
 
 /**
  * GameManager: orchestrátor Fáze 1A.
@@ -42,6 +45,7 @@ export class GameManager extends EventEmitter {
   private recoveryTimer: NodeJS.Timeout | null = null;
   private processTimer: NodeJS.Timeout | null = null;
   private broadcastEndTimer: NodeJS.Timeout | null = null;
+  private liveWebTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly collector: LeagueDataCollector,
@@ -65,6 +69,7 @@ export class GameManager extends EventEmitter {
     this.broadcast.start();
     this.recoveryTimer = setInterval(() => this.writeRecovery(), config.recoveryIntervalMs);
     this.processTimer = setInterval(() => void this.refreshProcesses(), 3000);
+    this.liveWebTimer = setInterval(() => void this.pushLiveToWeb(), LIVE_WEB_INTERVAL_MS);
     void this.refreshProcesses();
   }
 
@@ -97,6 +102,7 @@ export class GameManager extends EventEmitter {
     const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber, meta.localGameId);
     fs.mkdirSync(folder, { recursive: true });
     this.session = new GameSession(meta, folder);
+    this.liveWeb = { state: "idle", message: null, at: null, gameTime: null };
     this.damage = { fields: new Set(), samples: 0, lastWrittenAt: 0 };
     this.publisher.beginGame(meta, folder);
     log.info(`Nová hra: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`);
@@ -367,6 +373,47 @@ export class GameManager extends EventEmitter {
 
   private syncTimer: NodeJS.Timeout | null = null;
 
+  // --- živý stav hry na web -----------------------------------------------
+
+  /** Stav odesílání živých dat na web (pro dashboard). */
+  private liveWeb: {
+    state: "idle" | "ok" | "error";
+    message: string | null;
+    at: string | null;
+    gameTime: number | null;
+  } = { state: "idle", message: null, at: null, gameTime: null };
+  private liveWebSending = false;
+
+  /**
+   * Živý stav běžící hry na web: každých `LIVE_WEB_INTERVAL_MS`, jen když
+   * je hra LIVE, propojená s hrou na webu a Agent má token. Tvar je stejný
+   * jako výsledek po hře, jen bez vítěze. Nepovedený pokus se neopakuje —
+   * další stav přijde za pár sekund sám; do logu jde jen první chyba
+   * a návrat spojení, ne každý pokus.
+   */
+  private async pushLiveToWeb(): Promise<void> {
+    const s = this.session;
+    if (!s || s.status !== "LIVE" || !s.meta.web || this.liveWebSending) return;
+    if (!loadWebSettings().token) return;
+    const snapshot = this.snapshotFromLive(s);
+    if (!snapshot) return;
+
+    this.liveWebSending = true;
+    const gameTime = Math.round(snapshot.durationSeconds);
+    try {
+      await submitLive(s.meta.web.gameId, buildConfirmedGame(s.meta, snapshot, s.winner, s.winnerSource), gameTime);
+      if (this.liveWeb.state !== "ok") log.info(`${s.meta.localGameId}: živý stav se posílá na web.`);
+      this.liveWeb = { state: "ok", message: null, at: new Date().toISOString(), gameTime };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.liveWeb.state !== "error") log.warn(`${s.meta.localGameId}: živý stav se na web nezapsal: ${message}`);
+      this.liveWeb = { ...this.liveWeb, state: "error", message };
+    } finally {
+      this.liveWebSending = false;
+      this.emitUpdate();
+    }
+  }
+
   // --- diagnostika damage z LeagueBroadcastu (0.1.16) -----------------------
 
   /** Co z damage během aktuální hry přišlo; vzorky jdou do lb_damage.jsonl. */
@@ -555,6 +602,7 @@ export class GameManager extends EventEmitter {
       leagueBroadcast: this.broadcast.getStatus(),
       liveDelivery: this.publisher.getStatus(),
       session: this.session ? this.session.toClient() : null,
+      liveWeb: this.liveWeb,
       web: publicWebSettings(),
     };
   }

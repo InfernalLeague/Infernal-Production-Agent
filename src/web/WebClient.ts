@@ -6,6 +6,7 @@ import { loadWebSettings } from "./settings.js";
  *
  *   GET  /api/agent/schedule?date=RRRR-MM-DD   — zápasy produkce v daný den
  *   POST /api/agent/games/{id}/result          — výsledek hry (confirmed.json)
+ *   POST /api/agent/games/{id}/live            — živý stav běžící hry
  *
  * Web výsledek zapíše a hru rovnou potvrdí. Chyby rozlišujeme na
  * „zkus znovu“ (síť, 5xx) a „odmítnuto“ (4xx s českou hláškou z webu —
@@ -97,6 +98,18 @@ async function request<T>(method: "GET" | "POST", pathname: string, body?: unkno
 export function fetchSchedule(date?: string): Promise<WebSchedule> {
   const query = date ? `?date=${encodeURIComponent(date)}` : "";
   return request<WebSchedule>("GET", `/api/agent/schedule${query}`);
+}
+
+/**
+ * Živý stav běžící hry: stejný tvar jako výsledek (bez vítěze) a herní čas.
+ * Posílá se každých pár sekund; nepovedený pokus se neopakuje, další stav
+ * přijde za chvíli sám.
+ */
+export async function submitLive(gameId: string, confirmed: ConfirmedGame, gameTime: number): Promise<void> {
+  await request<{ ok: true }>("POST", `/api/agent/games/${encodeURIComponent(gameId)}/live`, {
+    confirmed,
+    gameTime,
+  });
 }
 
 export async function submitResult(gameId: string, confirmed: ConfirmedGame): Promise<SubmitResultResponse> {
