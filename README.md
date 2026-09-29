@@ -77,30 +77,40 @@ zůstávají v repu.
 
 ## Postup v UI
 
+Dashboard je jedna obrazovka (od 0.1.22):
+- vlevo je program produkce,
+- vpravo je karta aktuální hry,
+- v horní liště jsou světla stavu (Klient, Hra, Broadcast, Web). Když je potřeba
+  něco udělat, pod lištou se ukáže pruh s pokynem.
+
+Ruční hra, Export .TXT, overlaye pro OBS a vypnutí autopilota jsou v menu **⋯**.
+
 ### Autopilot (výchozí)
 
-1. V **⚙ Web** vlož tokeny produkcí (Twitch, Kick) z adminu webu.
+1. V **⚙** vlož tokeny produkcí (Twitch, Kick) z adminu webu.
 2. Po startu vyber produkci. Agent tokenem té produkce načte dnešní program
-   (každých 15 s znovu) a první hru bez výsledku připraví sám (`WAITING FOR GAME`).
+   (každých 15 s znovu) a první hru bez výsledku připraví sám (karta *Čeká na start*).
 3. Start hry pozná sám. Hru s daty předchozí hry, která ještě visí
    na výsledkové obrazovce, nepřevezme.
 4. Po konci hry vítěze odhadne a výsledek zapíše na web. Web založí další hru
    série a Agent na ni hned přejde. Po konci série přejde na další zápas programu.
-5. Produkce jen kontroluje vítěze: **Potvrdit** odhad, nebo přepnout na druhý tým.
-   Vítěze **předchozí hry** jde opravit i poté, co Agent čeká na další.
-   Bez odhadu (surrender) Agent čeká, až vítěze zvolí produkce.
+5. Produkce jen kontroluje vítěze. Klikem na odhadnutý tým odhad potvrdí,
+   nebo zvolí druhý tým.
+   - Vítěze **předchozí hry** jde opravit v programu tlačítkem *Opravit*,
+     i když už Agent čeká na další hru.
+   - Bez odhadu (surrender) Agent čeká, až vítěze zvolí produkce.
 
 Hru založenou ručně autopilot nepřepíše. Převezme to až po jejím konci.
 
 ### Ruční hra
 
-1. Vyplň **New Game** (Team 1/2, číslo hry, série, strana) → **CREATE GAME**.
-2. Stav přejde na `WAITING FOR GAME`. Jakmile LeagueBroadcast nebo Live API začne
-   odpovídat → `LIVE`
-   a dashboard ukazuje K/D/A, CS, Vision, level, championy, pentakilly.
-3. Po konci hry (Live API mlčí ~12 s, nebo tlačítkem *Ukončit hru ručně*) →
-   `GAME ENDED` a zmrazí se **final live snapshot**.
-4. Zvol **Winner** a klikni **EXPORT .TXT**.
+1. V menu **⋯ → Ruční hra** vyplň týmy, číslo hry, sérii a stranu → **Založit hru**.
+2. Karta přejde na *Čeká na start*. Jakmile LeagueBroadcast nebo Live API začne
+   odpovídat, přejde na `LIVE` a ukazuje souhrn hry. Hráče (K/D/A, CS, gold, itemy)
+   rozbalíš pod ním.
+3. Po konci hry (Live API mlčí ~12 s, nebo tlačítkem *Ukončit hru ručně*) se
+   ukáže *Konec hry* a zmrazí se **final live snapshot**.
+4. Zvol vítěze a v menu **⋯** klikni na **Export .TXT**.
 
 ## Výstup
 

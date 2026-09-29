@@ -1,8 +1,14 @@
-// Infernal Production Agent – dashboard (Fáze 1A)
+// Infernal Production Agent – dashboard
+//
+// Jedna obrazovka: vlevo program produkce, vpravo karta aktuální hry, která
+// mění podobu podle fáze (čeká na start → LIVE → potvrzení vítěze). Stav
+// spojení je v horní liště; co je potřeba udělat, ukáže pruh pod ní.
 const $ = (id) => document.getElementById(id);
 
 let state = null;
-let currentWinner = "";
+let production = localStorage.getItem("il_production");
+/** Hra z programu, u které je otevřená oprava vítěze (jen předchozí hra). */
+let fixOpen = null;
 
 // --- Data Dragon: champion ikony -------------------------------------------
 let ddVersion = null;
@@ -39,7 +45,6 @@ function connectWs() {
   ws.onclose = () => setTimeout(connectWs, 1500); // reconnect
 }
 
-// --- akce -------------------------------------------------------------------
 async function post(url, body) {
   const res = await fetch(url, {
     method: "POST",
@@ -49,14 +54,37 @@ async function post(url, body) {
   return { ok: res.ok, data: await res.json().catch(() => ({})) };
 }
 
-// --- New Game modal ---------------------------------------------------------
+// --- menu ⋯ -----------------------------------------------------------------
+function closeMenu() { $("menuList").hidden = true; }
+$("menuBtn").onclick = (e) => { e.stopPropagation(); $("menuList").hidden = !$("menuList").hidden; };
+document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) closeMenu(); });
+$("menuList").addEventListener("click", (e) => {
+  const act = e.target.closest("button")?.dataset.act;
+  if (!act) return;
+  closeMenu();
+  if (act === "manual") openNewGame();
+  if (act === "export") exportTxt();
+  if (act === "overlays") showOverlays(true);
+  if (act === "refresh") {
+    if (production) post("/api/production", { production });
+    post("/api/autopilot", { enabled: $("autoEnabled").checked });
+    toast("Načítám program…", "ok");
+  }
+});
+$("autoEnabled").onchange = () => post("/api/autopilot", { enabled: $("autoEnabled").checked });
+
+async function exportTxt() {
+  const { ok, data } = await post("/api/export/txt");
+  if (ok) toast(`Exportováno: ${data.filename}`, "ok");
+  else toast(data.error || "Export selhal.", "err");
+}
+
+// --- ruční hra (modal) --------------------------------------------------------
 function openNewGame() { $("newGameModal").hidden = false; }
 function closeNewGame() { $("newGameModal").hidden = true; }
-$("openNewGame").onclick = openNewGame;
-$("emptyCreate").onclick = openNewGame;
 $("closeNewGame").onclick = closeNewGame;
 $("newGameModal").addEventListener("click", (e) => { if (e.target.id === "newGameModal") closeNewGame(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNewGame(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeNewGame(); closeMenu(); } });
 
 $("createBtn").onclick = async () => {
   const hint = $("createHint");
@@ -80,18 +108,66 @@ $("createBtn").onclick = async () => {
   }
 };
 
-$("endBtn").onclick = () => post("/api/game/end");
-$("webResendBtn").onclick = () => post("/api/game/sync");
+// Výběr hry z programu produkce (ruční hra).
+let selectedWebGame = null;
+const todayIso = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+$("webDate").value = todayIso();
 
-// Autopilot a předchozí hra.
-$("autoEnabled").onchange = () => post("/api/autopilot", { enabled: $("autoEnabled").checked });
-$("autoRefresh").onclick = () => { if (production) post("/api/production", { production }); post("/api/autopilot", { enabled: $("autoEnabled").checked }); };
-// Potvrzení odhadnutého vítěze: stejný tým znovu = zdroj „manual“, na web se znovu neposílá.
-$("winnerConfirm").onclick = () => post("/api/game/winner", { winner: currentWinner });
-$("prevConfirm").onclick = () => state && state.previous && post("/api/game/winner", { winner: state.previous.winner, which: "previous" });
-$("prevResend").onclick = () => post("/api/game/sync", { which: "previous" });
+function selectWebGame(pick) {
+  selectedWebGame = pick ? { gameId: pick.game.id, matchId: pick.match.id, label: pick.label } : null;
+  document.querySelectorAll(".web-game").forEach((b) => b.classList.toggle("active", pick && b.dataset.game === pick.game.id));
+  const hint = $("webPickHint");
+  hint.className = "hint";
+  if (!pick) return;
+  const a = pick.match.teamA, b = pick.match.teamB;
+  const g = pick.game;
+  $("team1").value = a ? a.name : "";
+  $("team2").value = b ? b.name : "";
+  $("gameNumber").value = g.number;
+  const fmt = String(pick.match.format || "").toUpperCase();
+  if (["BO1", "BO3", "BO5"].includes(fmt)) $("seriesFormat").value = fmt;
+  // Strany podle hry na webu (Champion Draft / volba strany); jinak team A modrá.
+  $("team1Side").value = a && g.redTeamId === a.id ? "RED" : "BLUE";
+  hint.textContent = `Vybráno: ${pick.label}. Výsledek se po konci hry zapíše k téhle hře a rovnou potvrdí.`;
+  hint.classList.add("ok");
+}
 
-// --- napojení na web ---------------------------------------------------------
+$("webLoadBtn").onclick = async () => {
+  const list = $("webGames");
+  const hint = $("webPickHint");
+  hint.className = "hint";
+  list.innerHTML = '<span class="none">Načítám…</span>';
+  const res = await fetch(`/api/web/schedule?date=${encodeURIComponent($("webDate").value || todayIso())}`);
+  const data = await res.json().catch(() => ({}));
+  list.innerHTML = "";
+  if (!res.ok) {
+    hint.textContent = data.error || "Program se nepodařilo načíst.";
+    hint.classList.add("err");
+    return;
+  }
+  const matches = data.matches || [];
+  if (matches.length === 0) {
+    list.innerHTML = '<span class="none">V tento den produkce nemá žádný zápas.</span>';
+    return;
+  }
+  for (const match of matches) {
+    const names = `${match.teamA ? match.teamA.name : "?"} vs ${match.teamB ? match.teamB.name : "?"}`;
+    for (const game of match.games) {
+      const btn = document.createElement("button");
+      btn.className = "web-game";
+      btn.dataset.game = game.id;
+      const status = game.status === "confirmed"
+        ? (game.resultSource === "admin" ? "potvrzeno adminem" : "potvrzeno")
+        : game.status === "annulled" ? "anulováno" : "čeká";
+      btn.innerHTML = `<b>${esc(fmtTime(match.scheduledAt))} · ${esc(names)}</b><span>Game ${game.number} · ${esc(status)}${match.published ? "" : " · nezveřejněný"}</span>`;
+      btn.disabled = game.status === "annulled" || game.resultSource === "admin";
+      btn.onclick = () => selectWebGame({ match, game, label: `${names} · Game ${game.number}` });
+      list.appendChild(btn);
+    }
+  }
+};
+
+// --- napojení na web (modal) -----------------------------------------------------
 function openSettings() {
   $("settingsModal").hidden = false;
   $("settingsHint").className = "hint";
@@ -158,81 +234,55 @@ $("testWebBtn").onclick = async () => {
   hint.classList.add(failed || !lines.length ? "err" : "ok");
 };
 
-// Výběr hry z programu produkce (New Game).
-let selectedWebGame = null;
-const todayIso = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-$("webDate").value = todayIso();
+// --- produkce (Twitch / Kick) --------------------------------------------------
+const PRODUCTIONS = {
+  twitch: { label: "Twitch", production: "Twitch" },
+  kick: { label: "Kick", production: "Kick" },
+};
 
-function selectWebGame(pick) {
-  selectedWebGame = pick ? { gameId: pick.game.id, matchId: pick.match.id, label: pick.label } : null;
-  document.querySelectorAll(".web-game").forEach((b) => b.classList.toggle("active", pick && b.dataset.game === pick.game.id));
-  const hint = $("webPickHint");
-  hint.className = "hint";
-  if (!pick) return;
-  const a = pick.match.teamA, b = pick.match.teamB;
-  const g = pick.game;
-  $("team1").value = a ? a.name : "";
-  $("team2").value = b ? b.name : "";
-  $("gameNumber").value = g.number;
-  const fmt = String(pick.match.format || "").toUpperCase();
-  if (["BO1", "BO3", "BO5"].includes(fmt)) $("seriesFormat").value = fmt;
-  // Strany podle hry na webu (Champion Draft / volba strany); jinak team A modrá.
-  $("team1Side").value = a && g.redTeamId === a.id ? "RED" : "BLUE";
-  hint.textContent = `Vybráno: ${pick.label}. Výsledek se po konci hry zapíše k téhle hře a rovnou potvrdí.`;
-  hint.classList.add("ok");
+function applyProduction(p) {
+  if (!PRODUCTIONS[p]) return;
+  production = p;
+  localStorage.setItem("il_production", p);
+  // Agent podle produkce vybere token, načte program a zakládá hry.
+  post("/api/production", { production: p });
+  document.body.dataset.prod = p;
+  $("prodSwitch").textContent = PRODUCTIONS[p].label;
+  $("production").value = PRODUCTIONS[p].production;
 }
 
-$("webLoadBtn").onclick = async () => {
-  const list = $("webGames");
-  const hint = $("webPickHint");
-  hint.className = "hint";
-  list.innerHTML = '<span class="dash-none">Načítám…</span>';
-  const res = await fetch(`/api/web/schedule?date=${encodeURIComponent($("webDate").value || todayIso())}`);
-  const data = await res.json().catch(() => ({}));
-  list.innerHTML = "";
-  if (!res.ok) {
-    hint.textContent = data.error || "Program se nepodařilo načíst.";
-    hint.classList.add("err");
-    return;
-  }
-  const matches = data.matches || [];
-  if (matches.length === 0) {
-    list.innerHTML = '<span class="dash-none">V tento den produkce nemá žádný zápas.</span>';
-    return;
-  }
-  for (const match of matches) {
-    const time = new Date(match.scheduledAt).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
-    const names = `${match.teamA ? match.teamA.name : "?"} vs ${match.teamB ? match.teamB.name : "?"}`;
-    for (const game of match.games) {
-      const btn = document.createElement("button");
-      btn.className = "web-game";
-      btn.dataset.game = game.id;
-      const status = game.status === "confirmed"
-        ? (game.resultSource === "admin" ? "potvrzeno adminem" : "potvrzeno")
-        : game.status === "annulled" ? "anulováno" : "čeká";
-      btn.innerHTML = `<b>${esc(time)} · ${esc(names)}</b><span>Game ${game.number} · ${esc(status)}${match.published ? "" : " · nezveřejněný"}</span>`;
-      btn.disabled = game.status === "annulled" || game.resultSource === "admin";
-      btn.onclick = () => selectWebGame({ match, game, label: `${names} · Game ${game.number}` });
-      list.appendChild(btn);
-    }
-  }
-};
+function openProdModal() { $("prodModal").hidden = false; }
+function closeProdModal() { $("prodModal").hidden = true; }
+document.querySelectorAll(".prod-choice").forEach((b) => (b.onclick = () => {
+  applyProduction(b.dataset.prod);
+  closeProdModal();
+  toast(`Produkce: ${PRODUCTIONS[b.dataset.prod].label}`, "ok");
+}));
+$("prodSwitch").onclick = openProdModal;
+$("prodModal").addEventListener("click", (e) => { if (e.target.id === "prodModal" && production) closeProdModal(); });
 
-$("exportBtn").onclick = async () => {
-  const hint = $("exportHint");
-  hint.className = "hint";
-  const { ok, data } = await post("/api/export/txt");
-  if (ok) {
-    hint.textContent = data.filePath || "";
-    hint.classList.add("ok");
-    toast(`✓ Exportováno: ${data.filename}`, "ok");
-    refreshGames();
-  } else {
-    hint.textContent = data.error || "Export selhal.";
-    hint.classList.add("err");
-    toast(data.error || "Export selhal.", "err");
+// --- akce na kartě hry -----------------------------------------------------------
+$("endBtn").onclick = () => post("/api/game/end");
+$("webResendBtn").onclick = () => post("/api/game/sync");
+// Klik na tým = vítěz. Klik na už vybraný (odhadnutý) tým odhad potvrdí;
+// na web se znovu neposílá.
+$("winnerBtns").addEventListener("click", (e) => {
+  const team = e.target.closest("[data-team]")?.dataset.team;
+  if (team) post("/api/game/winner", { winner: team });
+});
+
+// Oprava vítěze předchozí hry přímo v programu.
+$("programList").addEventListener("click", (e) => {
+  const fix = e.target.closest("[data-fix]");
+  if (fix) {
+    fixOpen = fixOpen === fix.dataset.fix ? null : fix.dataset.fix;
+    if (state) render(state);
+    return;
   }
-};
+  const team = e.target.closest("[data-prev-team]")?.dataset.prevTeam;
+  if (team) post("/api/game/winner", { winner: team, which: "previous" });
+  if (e.target.closest("[data-prev-resend]")) post("/api/game/sync", { which: "previous" });
+});
 
 // --- toast ------------------------------------------------------------------
 function toast(msg, type) {
@@ -245,291 +295,291 @@ function toast(msg, type) {
 }
 
 // --- render -----------------------------------------------------------------
-function statusValue(el, text, cls) {
-  el.textContent = text;
-  el.parentElement.className = "status-value " + (cls || "");
-}
+const ENDED = ["GAME_ENDED", "EXPORTED"];
+const WAITING = ["WAITING_FOR_GAME", "CREATED"];
+const PROGRAM_STATE = {
+  done: "dohráno", current: "teď", next: "na řadě", upcoming: "později",
+  annulled: "anulováno", admin: "zapsal admin", pending: "hra zatím nezaložená",
+};
+const SYNC_TEXT = {
+  idle: () => "",
+  sending: () => "Zapisuji výsledek na web…",
+  ok: (sync) => `✓ Zapsáno na webu (revize ${sync.revision})${sync.unmatched ? ` · ${sync.unmatched} hráčů nespárováno — zkontroluj v adminu` : ""}`,
+  error: (sync) => `Nezapsáno: ${sync.message || "chyba"}${sync.message && sync.message.startsWith("Chybí vítěz") ? "" : " — zkusím znovu za 30 s"}`,
+  rejected: (sync) => `Web výsledek odmítl: ${sync.message || ""}`,
+};
 
 function render(s) {
   state = s;
   $("mockBadge").hidden = !s.mock;
-  renderDashRunning(s);
+  if (s.autopilot) $("autoEnabled").checked = s.autopilot.enabled;
+  renderHealth(s);
+  renderProgram(s);
+  renderGame(s);
+}
 
-  statusValue($("stClient"), s.leagueClient ? "CONNECTED" : "NOT RUNNING", s.leagueClient ? "ok" : "bad");
-  statusValue($("stGame"), s.leagueGame ? "RUNNING" : "NOT RUNNING", s.leagueGame ? "ok" : "bad");
-
+// Horní lišta: čtyři světla a pruh s tím, co je potřeba udělat.
+function renderHealth(s) {
   const sess = s.session;
-  const apiLive = s.liveApiReachable && sess && sess.meta.status === "LIVE";
-  if (apiLive) statusValue($("stApi"), "LIVE", "live");
-  else if (s.liveApiReachable) statusValue($("stApi"), "RESPONDING", "ok");
-  else statusValue($("stApi"), sess ? "WAITING" : "—", sess ? "warn" : "bad");
-
+  const active = sess && (WAITING.includes(sess.meta.status) || sess.meta.status === "LIVE");
   const broadcast = s.leagueBroadcast || {};
-  if (!broadcast.enabled) statusValue($("stBroadcast"), s.mock ? "MOCK DISABLED" : "DISABLED", "bad");
-  else if (broadcast.connected) statusValue($("stBroadcast"), broadcast.gameState || "CONNECTED", broadcast.gameState === "Running" ? "live" : "ok");
-  else statusValue($("stBroadcast"), "RECONNECTING", "warn");
+  const a = s.autopilot || {};
+  const issues = [];
 
-  const delivery = s.liveDelivery || { mode: "local-only", pending: 0 };
-  if (delivery.mode === "remote") {
-    statusValue($("stDelivery"), delivery.pending ? `OUTBOX ${delivery.pending}` : "REMOTE READY", delivery.pending ? "warn" : "ok");
-  } else {
-    statusValue($("stDelivery"), "LOCAL TEST", "ok");
+  const set = (id, cls, title) => {
+    $(id).className = "hp " + cls;
+    $(id).title = title;
+  };
+
+  if (s.mock) set("hpClient", "idle", "Mock režim");
+  else if (s.leagueClient) set("hpClient", "ok", "League klient běží");
+  else {
+    set("hpClient", active ? "warn" : "idle", "League klient neběží");
+    if (active) issues.push({ level: "warn", text: "Spusť League klienta a spectate hry." });
   }
 
-  renderAutopilot(s);
-  renderPrevious(s);
-  renderDashProgram(s);
+  if (s.leagueGame || (sess && sess.meta.status === "LIVE")) set("hpGame", "ok", "Spectate běží");
+  else set("hpGame", "idle", "Spectate zatím neběží");
 
+  if (!broadcast.enabled) set("hpBroadcast", "idle", s.mock ? "V mock režimu vypnutý" : "Vypnutý");
+  else if (broadcast.connected) set("hpBroadcast", "ok", `LeagueBroadcast: ${broadcast.gameState || "připojený"}`);
+  else {
+    set("hpBroadcast", active ? "bad" : "warn", "LeagueBroadcast neběží");
+    if (active) issues.push({ level: "bad", text: "LeagueBroadcast neběží — spusť ho, jinak chybí gold, draci a baroni." });
+  }
+
+  const web = s.web || {};
+  if (!a.production) set("hpWeb", "idle", "Není vybraná produkce");
+  else if (!web.hasToken) {
+    set("hpWeb", "bad", "Chybí token produkce");
+    issues.push({ level: "bad", text: `Chybí token produkce ${PRODUCTIONS[a.production].label} — vlož ho v ⚙.` });
+  } else if (a.error) {
+    set("hpWeb", "bad", a.error);
+    issues.push({ level: "bad", text: a.error });
+  } else if (sess && sess.meta.status === "LIVE" && s.liveWeb && s.liveWeb.state === "error") {
+    set("hpWeb", "warn", `Živý stav se nezapisuje: ${s.liveWeb.message || "chyba"}`);
+    issues.push({ level: "warn", text: `Živý stav se na web nezapisuje: ${s.liveWeb.message || "chyba"} — zkouším dál.` });
+  } else set("hpWeb", "ok", "Web v pořádku");
+
+  const issue = issues.find((i) => i.level === "bad") || issues[0];
+  $("issue").hidden = !issue;
+  if (issue) {
+    $("issue").className = "issue " + issue.level;
+    $("issue").textContent = issue.text;
+  }
+}
+
+// Program vlevo: zápasy dne a jejich hry.
+function renderProgram(s) {
+  const a = s.autopilot || {};
+  $("programDate").textContent = new Date().toLocaleDateString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" })
+    + (a.enabled === false ? " · autopilot vypnutý" : "");
+  const list = $("programList");
+  const program = a.program || [];
+  if (!a.production) { list.innerHTML = '<p class="none">Vyber produkci vpravo nahoře.</p>'; return; }
+  if (a.error && !program.length) { list.innerHTML = `<p class="none">${esc(a.error)}</p>`; return; }
+  if (!program.length) {
+    list.innerHTML = `<p class="none">${a.fetchedAt ? "Produkce dnes nemá v programu žádný zápas." : "Načítám program…"}</p>`;
+    return;
+  }
+
+  const prev = s.previous;
+  const prevOpen = prev && prev.meta.web && (!s.session || prev.meta.localGameId !== s.session.meta.localGameId);
+  const prevGameId = prevOpen ? prev.meta.web.gameId : null;
+  if (fixOpen && fixOpen !== prevGameId) fixOpen = null;
+
+  const groups = [];
+  for (const g of program) {
+    let group = groups.find((x) => x.matchId === g.matchId);
+    if (!group) groups.push((group = { matchId: g.matchId, first: g, games: [] }));
+    group.games.push(g);
+  }
+
+  list.innerHTML = groups.map(({ first, games }) => {
+    const hot = games.some((g) => g.state === "current" || g.state === "next");
+    const done = games.every((g) => g.state === "done" || g.state === "annulled" || g.state === "admin");
+    return `<div class="pm ${hot ? "hot" : ""} ${done ? "done" : ""}">` +
+      `<div class="pm-head"><span class="pm-time">${esc(fmtTime(first.scheduledAt))}</span>` +
+      `<span class="pm-teams">${esc(first.teamA)} <em>vs</em> ${esc(first.teamB)}</span>` +
+      `${first.published ? "" : '<span class="pm-test">test</span>'}</div>` +
+      games.map((g) => programGame(g, prev, prevGameId)).join("") +
+      `</div>`;
+  }).join("");
+}
+
+function programGame(g, prev, prevGameId) {
+  const label = g.number ? `Game ${g.number}` : "Game 1";
+  const status = g.winner ? `🏆 ${g.winner}` : PROGRAM_STATE[g.state] || g.state;
+  const canFix = g.gameId && g.gameId === prevGameId;
+  let html = `<div class="pg ${g.state}"><span class="pg-n">${esc(label)}</span><span class="pg-s">${esc(status)}</span>` +
+    (canFix ? `<button class="pg-fix" data-fix="${esc(g.gameId)}">${fixOpen === g.gameId ? "Zavřít" : "Opravit"}</button>` : "") +
+    `</div>`;
+  if (canFix && fixOpen === g.gameId) {
+    const sync = prev.webSync || { state: "idle" };
+    html += `<div class="pg-fixbox">` +
+      `<div class="pg-fixbtns">${[prev.meta.team1, prev.meta.team2].map((name) =>
+        `<button class="seg-btn ${prev.winner === name ? "active" : ""}" data-prev-team="${esc(name)}">${esc(name)}</button>`).join("")}</div>` +
+      `<span class="web-sync-text ${sync.state}">${esc((SYNC_TEXT[sync.state] || SYNC_TEXT.idle)(sync))}</span>` +
+      (sync.state === "error" || sync.state === "rejected" ? '<button class="btn btn-sm btn-ghost" data-prev-resend>Odeslat znovu</button>' : "") +
+      `</div>`;
+  }
+  return html;
+}
+
+// Karta aktuální hry.
+function renderGame(s) {
+  const sess = s.session;
+  const status = sess ? sess.meta.status : null;
+  const showGame = Boolean(sess);
+  $("idle").hidden = showGame;
+  $("gameHead").hidden = !showGame;
   if (!sess) {
-    statusValue($("stCurrent"), "NONE", "bad");
-    $("gamePanel").hidden = true;
-    $("emptyState").hidden = false;
+    const { title, text } = idleText(s);
+    $("idleTitle").textContent = title;
+    $("idleText").textContent = text;
+    ["waitBox", "winnerBox", "summary", "liveNote", "boards", "gameActions"].forEach((id) => ($(id).hidden = true));
     return;
   }
 
   const m = sess.meta;
-  statusValue($("stCurrent"), `${m.team1} vs ${m.team2} · G${m.gameNumber}`, "ok");
-  $("emptyState").hidden = true;
-  $("gamePanel").hidden = false;
-
   $("mTeam1").textContent = m.team1;
   $("mTeam2").textContent = m.team2;
-  $("mGame").textContent = `Game ${m.gameNumber} · ${m.seriesFormat}`;
+  $("mGame").textContent = `Game ${m.gameNumber} · ${m.seriesFormat}${m.web ? "" : " · bez webu"}`;
   $("mId").textContent = m.localGameId;
 
-  const source = $("dataSourceBadge");
-  const broadcastFresh = broadcast.connected && broadcast.lastSnapshotAt && Date.now() - broadcast.lastSnapshotAt < 3000;
-  source.className = "source-pill " + (broadcastFresh ? "primary" : "fallback");
-  source.textContent = broadcastFresh ? "WEBSOCKET · LEAGUEBROADCAST" : (s.mock ? "MOCK DATA" : "FALLBACK · RIOT LIVE API");
-  const deliveryNote = $("deliveryNote");
-  deliveryNote.className = "delivery-note " + (delivery.mode === "remote" ? "remote" : "");
-  deliveryNote.textContent = delivery.mode === "remote"
-    ? `Database stream aktivní${delivery.pending ? ` · ${delivery.pending} čeká` : ""}`
-    : "Live stream: local test log";
-
-  // stav odeslání výsledku na web
-  const webBox = $("webSync");
-  const sync = sess.webSync || { state: "idle" };
-  webBox.hidden = !m.web;
-  if (m.web) {
-    const text = {
-      idle: m.status === "LIVE" && s.liveWeb && s.liveWeb.state !== "idle"
-        ? (s.liveWeb.state === "ok"
-          ? `● Živě na webu (${fmtClock(s.liveWeb.gameTime || 0)}) — výsledek se zapíše po konci hry.`
-          : `Živý stav se na web nezapsal: ${s.liveWeb.message || "chyba"} — zkouším dál.`)
-        : `Propojeno s „${m.web.label}“ — výsledek se zapíše po konci hry.`,
-      sending: "Zapisuji výsledek na web…",
-      ok: `✓ Zapsáno a potvrzeno na webu (revize ${sync.revision})${sync.unmatched ? ` · ${sync.unmatched} hráčů nespárováno — zkontroluj v adminu` : ""}`,
-      error: `Nezapsáno: ${sync.message || "chyba"}${sync.message && sync.message.startsWith("Chybí vítěz") ? "" : " — zkusím znovu za 30 s"}`,
-      rejected: `Web výsledek odmítl: ${sync.message || ""}`,
-    }[sync.state] || "—";
-    $("webSyncText").textContent = text;
-    $("webSyncText").className = "web-sync-text " + sync.state;
-    $("webResendBtn").hidden = !(sync.state === "error" || sync.state === "rejected");
-  }
-
-  // fáze badge
   const badge = $("phaseBadge");
-  const cls = { WAITING_FOR_GAME: "waiting", LIVE: "live", GAME_ENDED: "ended", EXPORTED: "exported" }[m.status] || "";
-  badge.className = "badge " + cls;
-  badge.textContent = { WAITING_FOR_GAME: "WAITING FOR GAME", LIVE: "LIVE", GAME_ENDED: "GAME ENDED", EXPORTED: "EXPORTED" }[m.status] || m.status;
+  badge.className = "badge " + ({ WAITING_FOR_GAME: "waiting", CREATED: "waiting", LIVE: "live", GAME_ENDED: "ended", EXPORTED: "ended" }[status] || "");
+  badge.textContent = { WAITING_FOR_GAME: "ČEKÁ NA START", CREATED: "ČEKÁ NA START", LIVE: "LIVE", GAME_ENDED: "KONEC HRY", EXPORTED: "KONEC HRY" }[status] || status;
 
-  // strany
+  const live = sess.live;
+  const snap = live || sess.finalSnapshot;
+  const clock = $("clock");
+  clock.textContent = snap ? fmtClock(snap.durationSeconds) : "--:--";
+  clock.classList.toggle("live", status === "LIVE");
+
   const blueTeam = m.team1Side === "BLUE" ? m.team1 : m.team2;
   const redTeam = m.team1Side === "BLUE" ? m.team2 : m.team1;
+
+  // čekání na start
+  $("waitBox").hidden = !WAITING.includes(status);
+  if (WAITING.includes(status)) {
+    $("waitBlue").textContent = blueTeam;
+    $("waitRed").textContent = redTeam;
+    $("waitText").textContent = m.auto
+      ? "Autopilot čeká na start hry. Jakmile naběhne spectate, začne sbírat data sám."
+      : "Čekám na start hry. Jakmile naběhne spectate, začnu sbírat data.";
+  }
+
+  // konec hry: vítěz
+  const ended = ENDED.includes(status);
+  $("winnerBox").hidden = !ended;
+  if (ended) renderWinner(sess, blueTeam, redTeam);
+
+  // souhrn + hráči
+  const players = snap ? snap.players : [];
+  $("summary").hidden = !snap;
+  if (snap) renderSummary(snap);
+  const note = $("liveNote");
+  note.hidden = status !== "LIVE";
+  if (status === "LIVE") note.textContent = liveNote(s, m);
+
+  $("boards").hidden = players.length === 0;
   $("blueTeamName").textContent = blueTeam;
   $("redTeamName").textContent = redTeam;
-
-  renderWinner(m, sess.winner);
-  // Vítěz předvyplněný odhadem po konci hry (poslední zbouraná budova).
-  const autoWinner = Boolean(sess.winner && sess.winnerSource === "auto");
-  $("winnerAuto").hidden = !autoWinner;
-  $("winnerConfirm").hidden = !autoWinner;
-
-  // live tabulky
-  const live = sess.live;
-  const dur = live ? live.durationSeconds : (sess.finalSnapshot ? sess.finalSnapshot.durationSeconds : 0);
-  const clock = $("clock");
-  clock.textContent = fmtClock(dur);
-  clock.classList.toggle("live", m.status === "LIVE");
-  const players = live ? live.players : (sess.finalSnapshot ? sess.finalSnapshot.players : []);
-  const kills = live ? live.teamKills : (sess.finalSnapshot ? sess.finalSnapshot.teamKills : { BLUE: 0, RED: 0 });
-  const gold = live ? live.teamGold : (sess.finalSnapshot ? sess.finalSnapshot.teamGold : { BLUE: null, RED: null });
-  $("blueKills").textContent = kills.BLUE;
-  $("redKills").textContent = kills.RED;
-  // Gold týmu a rozdíl proti soupeři (kladný = vede).
-  const teamGoldText = (own, enemy) =>
-    own == null ? "— gold" : `${fmtGold(own)} gold${enemy == null ? "" : ` (${fmtDiff(own - enemy)})`}`;
-  $("blueGold").textContent = teamGoldText(gold && gold.BLUE, gold && gold.RED);
-  $("redGold").textContent = teamGoldText(gold && gold.RED, gold && gold.BLUE);
-
-  // objektivy (draci podle typu, baroni, heraldi, voidgrubi, věže, inhiby)
-  const objectives = live ? live.objectives : (sess.finalSnapshot ? sess.finalSnapshot.objectives : null);
-  $("blueObj").textContent = fmtObjectives(objectives && objectives.teams.BLUE);
-  $("redObj").textContent = fmtObjectives(objectives && objectives.teams.RED);
-
-  // first blood (jméno + strana), jakmile padne první krev
-  const fb = live ? live.firstBlood : (sess.finalSnapshot ? sess.finalSnapshot.firstBlood : null);
-  const fbEl = $("firstBlood");
-  if (fb) {
-    fbEl.hidden = false;
-    fbEl.textContent = `🩸 First Blood · ${fb.playerName}`;
-    fbEl.classList.toggle("side-blue", fb.side === "BLUE");
-    fbEl.classList.toggle("side-red", fb.side === "RED");
-  } else {
-    fbEl.hidden = true;
-  }
-  const lane14 = live ? live.laneGoldAt14 : (sess.finalSnapshot ? sess.finalSnapshot.laneGoldAt14 : null);
+  const lane14 = snap ? snap.laneGoldAt14 : null;
   renderRows("blueRows", players.filter((p) => p.side === "BLUE"), lane14);
   renderRows("redRows", players.filter((p) => p.side === "RED"), lane14);
 
-  // export tlačítko aktivní, jakmile máme data
-  $("exportBtn").disabled = players.length === 0;
-}
-
-// --- autopilot --------------------------------------------------------------
-const PROGRAM_STATE = {
-  done: "dohráno", current: "právě teď", next: "na řadě", upcoming: "později",
-  annulled: "anulováno", admin: "zapsal admin", pending: "hra zatím nezaložená",
-};
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
-
-function autopilotText(s) {
-  const a = s.autopilot;
-  const sess = s.session;
-  if (!a || !a.production) return { text: "Vyber produkci v horní liště — podle ní se načte program.", cls: "warn" };
-  if (a.error) return { text: a.error, cls: "err" };
-  if (!a.enabled) return { text: "Vypnutý — hry zakládáš ručně.", cls: "" };
-  if (sess) {
-    const label = sess.meta.web ? sess.meta.web.label : `${sess.meta.team1} vs ${sess.meta.team2} · Game ${sess.meta.gameNumber}`;
-    const st = sess.meta.status;
-    if (st === "LIVE") return { text: `● Sbírám data: ${label}`, cls: "live" };
-    if (st === "WAITING_FOR_GAME" || st === "CREATED") {
-      return { text: `Čekám na start hry: ${label}. Jakmile spectate naběhne, začnu sám.`, cls: "ok" };
-    }
-    if (st === "GAME_ENDED" && sess.meta.web) {
-      if (!sess.winner) return { text: `${label} skončila — zvol vítěze, pak přejdu na další hru.`, cls: "warn" };
-      const sync = sess.webSync || {};
-      if (sync.state === "error") return { text: `Výsledek se nezapsal: ${sync.message || "chyba"} — zkouším znovu.`, cls: "warn" };
-      if (sync.state === "sending" || sync.state === "idle") return { text: "Zapisuji výsledek na web…", cls: "" };
-    }
+  const fb = snap ? snap.firstBlood : null;
+  const fbEl = $("firstBlood");
+  fbEl.hidden = !fb;
+  if (fb) {
+    fbEl.textContent = `First Blood · ${fb.playerName}`;
+    fbEl.className = "fb-pill " + (fb.side === "BLUE" ? "side-blue" : "side-red");
   }
-  if (a.loading && !a.fetchedAt) return { text: "Načítám program…", cls: "" };
-  if (a.nextLabel) return { text: `Na řadě: ${a.nextLabel}`, cls: "ok" };
-  if (a.program.length === 0) return { text: "Produkce dnes nemá v programu žádný zápas.", cls: "" };
-  return { text: "Program je dohraný — dnes už žádná hra.", cls: "ok" };
+
+  $("gameActions").hidden = status !== "LIVE";
 }
 
-function renderAutopilot(s) {
-  const a = s.autopilot;
-  if (a) $("autoEnabled").checked = a.enabled;
-  const { text, cls } = autopilotText(s);
-  $("autoText").textContent = text;
-  $("autoText").className = "auto-text " + cls;
-  const list = $("autoProgram");
-  const program = (a && a.program) || [];
-  list.innerHTML = program.map((g) =>
-    `<div class="auto-game ${g.state}">` +
-    `<span class="auto-time">${esc(fmtTime(g.scheduledAt))}</span>` +
-    `<span class="auto-name">${esc(g.teamA)} vs ${esc(g.teamB)}${g.number ? ` · G${g.number}` : ""}${g.published ? "" : " · test"}</span>` +
-    `<span class="auto-state">${esc(g.winner ? `🏆 ${g.winner}` : PROGRAM_STATE[g.state] || g.state)}</span></div>`,
-  ).join("");
-  list.hidden = program.length === 0;
-  $("emptyText").textContent = a && a.enabled && a.production
-    ? "Autopilot připraví další hru z programu sám. Ruční hra jen pro zápas mimo program."
-    : "Založ hru ručně, nebo vyber produkci a zapni autopilota.";
+function idleText(s) {
+  const a = s.autopilot || {};
+  if (!a.production) return { title: "Vyber produkci", text: "Podle produkce agent načte program a hry bude zakládat sám." };
+  if (a.error) return { title: "Program se nenačetl", text: a.error };
+  if (!a.enabled) return { title: "Autopilot je vypnutý", text: "Zapni ho v menu ⋯, nebo tam založ hru ručně." };
+  if (!a.fetchedAt) return { title: "Načítám program…", text: "" };
+  if (a.nextLabel) return { title: "Připravuji další hru", text: a.nextLabel };
+  if (!(a.program || []).length) return { title: "Dnes nic nehrajeme", text: "Produkce nemá v programu žádný zápas. Hru mimo program založíš v menu ⋯." };
+  return { title: "Program je dohraný", text: "Dnes už žádná hra nečeká." };
 }
 
-const SYNC_TEXT = {
-  sending: () => "Zapisuji na web…",
-  ok: (sync) => `✓ Zapsáno na webu (revize ${sync.revision})${sync.unmatched ? ` · ${sync.unmatched} hráčů nespárováno` : ""}`,
-  error: (sync) => `Nezapsáno: ${sync.message || "chyba"}`,
-  rejected: (sync) => `Web odmítl: ${sync.message || ""}`,
-  idle: () => "",
-};
+function liveNote(s, m) {
+  const broadcast = s.leagueBroadcast || {};
+  const fresh = broadcast.connected && broadcast.lastSnapshotAt && Date.now() - broadcast.lastSnapshotAt < 3000;
+  const source = s.mock ? "mock data" : fresh ? "data z LeagueBroadcastu" : "záloha z Riot Live API (bez goldu)";
+  if (!m.web) return `Sbírám ${source}. Hra není propojená s webem.`;
+  const w = s.liveWeb || {};
+  const web = w.state === "ok" ? "živě na webu" : w.state === "error" ? "živý stav se na web nezapisuje" : "živý stav se chystá na web";
+  return `Sbírám ${source} · ${web}.`;
+}
 
-function renderPrevious(s) {
-  const prev = s.previous;
-  const show = Boolean(prev && (!s.session || prev.meta.localGameId !== s.session.meta.localGameId));
-  $("prevGame").hidden = !show;
-  if (!show) return;
-  const m = prev.meta;
-  $("prevTitle").textContent = `${m.web ? m.web.label : `${m.team1} vs ${m.team2} · Game ${m.gameNumber}`}`;
-  const seg = $("prevWinner");
-  const key = `${m.localGameId}`;
-  if (seg.dataset.filled !== key) {
-    seg.innerHTML = "";
-    [m.team1, m.team2].forEach((name) => {
-      const b = document.createElement("button");
-      b.className = "seg-btn";
-      b.textContent = name;
-      b.dataset.team = name;
-      b.onclick = () => post("/api/game/winner", { winner: name, which: "previous" });
-      seg.appendChild(b);
-    });
-    seg.dataset.filled = key;
+function renderWinner(sess, blueTeam, redTeam) {
+  const auto = sess.winner && sess.winnerSource === "auto";
+  $("winnerQ").textContent = !sess.winner
+    ? "Kdo vyhrál? Agent vítěze neodhadl — zvol ho, pak přejdu na další hru."
+    : auto
+      ? "Agent odhaduje vítěze podle zbořené nexusové věže. Klikni na něj pro potvrzení, nebo zvol druhý tým."
+      : "Vítěz potvrzený. Když je špatně, klikni na druhý tým.";
+  const btns = [[blueTeam, "BLUE"], [redTeam, "RED"]].map(([name, side]) => {
+    const active = sess.winner === name;
+    return `<button class="winner-btn ${active ? "active" : ""} side-${side.toLowerCase()}" data-team="${esc(name)}">` +
+      `<span class="tag side-${side.toLowerCase()}">${side}</span><b>${esc(name)}</b>` +
+      `<small>${active ? (auto ? "odhad — potvrdit" : "vítěz") : ""}</small></button>`;
+  }).join("");
+  if ($("winnerBtns").dataset.html !== btns) {
+    $("winnerBtns").innerHTML = btns;
+    $("winnerBtns").dataset.html = btns;
   }
-  [...seg.children].forEach((b) => b.classList.toggle("active", b.dataset.team === prev.winner));
-  const sync = prev.webSync || { state: "idle" };
-  $("prevSync").textContent = (SYNC_TEXT[sync.state] || SYNC_TEXT.idle)(sync);
-  $("prevSync").className = "web-sync-text " + sync.state;
-  $("prevConfirm").hidden = !(prev.winner && prev.winnerSource === "auto");
-  $("prevResend").hidden = !(sync.state === "error" || sync.state === "rejected");
+  const sync = sess.webSync || { state: "idle" };
+  const text = !sess.meta.web
+    ? "Hra není propojená s webem — výsledek zůstává jen v agentovi (Export .TXT v menu ⋯)."
+    : (SYNC_TEXT[sync.state] || SYNC_TEXT.idle)(sync);
+  $("webSyncText").textContent = text;
+  $("webSyncText").className = "web-sync-text " + sync.state;
+  $("webResendBtn").hidden = !(sync.state === "error" || sync.state === "rejected");
 }
 
-function renderDashProgram(s) {
-  const program = (s.autopilot && s.autopilot.program) || [];
-  const item = (g) => ({
-    title: `${fmtTime(g.scheduledAt)} · ${g.teamA} vs ${g.teamB}`,
-    sub: (g.number ? `Game ${g.number} · ` : "") + (g.winner ? `🏆 ${g.winner}` : PROGRAM_STATE[g.state] || g.state),
-    cls: g.state === "done" ? "ok" : g.state === "current" || g.state === "next" ? "hot" : "",
-  });
-  const noProgram = s.autopilot && s.autopilot.error ? s.autopilot.error
-    : s.autopilot && s.autopilot.production ? "Produkce dnes nemá v programu žádný zápas."
-    : "Vyber produkci v horní liště.";
-  fillDashList("dashScheduled", program.map(item), noProgram);
-  fillDashList(
-    "dashUpcoming",
-    program.filter((g) => ["current", "next", "upcoming", "pending"].includes(g.state)).map(item),
-    program.length ? "Dnes už nic nečeká." : noProgram,
-  );
+function renderSummary(snap) {
+  const k = snap.teamKills || { BLUE: 0, RED: 0 };
+  $("blueKills").textContent = k.BLUE;
+  $("redKills").textContent = k.RED;
+  const g = snap.teamGold || {};
+  const gold = $("goldDiff");
+  if (g.BLUE == null || g.RED == null) {
+    gold.textContent = "—";
+    gold.className = "";
+  } else {
+    const d = g.BLUE - g.RED;
+    gold.textContent = d === 0 ? "±0" : `${d > 0 ? "Blue" : "Red"} +${fmtK(Math.abs(d))}`;
+    gold.className = d > 0 ? "s-blue" : d < 0 ? "s-red" : "";
+  }
+  const t = snap.objectives && snap.objectives.teams;
+  const pair = (key) => (t ? `${t.BLUE[key]} : ${t.RED[key]}` : "0 : 0");
+  $("dragons").textContent = pair("dragons");
+  $("barons").textContent = pair("barons");
+  $("towers").textContent = pair("towers");
+  const soul = t && (t.BLUE.dragonSoul ? "Blue" : t.RED.dragonSoul ? "Red" : null);
+  $("dragons").title = t ? dragonTitle(t) + (soul ? ` · duše: ${soul}` : "") : "";
 }
 
 const DRAGON_LABELS = {
   fire: "Infernal", earth: "Mountain", water: "Ocean", air: "Cloud",
   hextech: "Hextech", chemtech: "Chemtech", elder: "Elder",
 };
-
-function fmtObjectives(t) {
-  if (!t) return "";
-  const dragons = Object.entries(t.dragonTypes)
-    .filter(([, count]) => count > 0)
-    .map(([type, count]) => (count > 1 ? `${count}× ` : "") + DRAGON_LABELS[type])
-    .join(", ");
-  const parts = [`🐉 ${t.dragons}${dragons ? ` (${dragons})` : ""}`];
-  if (t.dragonSoul) parts.push(`duše ${DRAGON_LABELS[t.dragonSoul]}`);
-  parts.push(`Baron ${t.barons}`, `Věže ${t.towers}`);
-  return parts.join(" · ");
-}
-
-function renderWinner(m, winner) {
-  const seg = $("winnerSeg");
-  const key = `${m.team1}|${m.team2}`;
-  if (seg.dataset.filled !== key) {
-    seg.innerHTML = "";
-    [m.team1, m.team2].forEach((name) => {
-      const b = document.createElement("button");
-      b.className = "seg-btn";
-      b.textContent = name;
-      b.dataset.team = name;
-      // Klik na už vybraný tým odhad potvrdí (na web se znovu neposílá).
-      b.onclick = () => post("/api/game/winner", { winner: name });
-      seg.appendChild(b);
-    });
-    seg.dataset.filled = key;
-  }
-  currentWinner = winner || "";
-  [...seg.children].forEach((b) => b.classList.toggle("active", b.dataset.team === currentWinner));
+function dragonTitle(t) {
+  const list = (team) => Object.entries(team.dragonTypes)
+    .filter(([, n]) => n > 0)
+    .map(([type, n]) => (n > 1 ? `${n}× ` : "") + DRAGON_LABELS[type]).join(", ") || "—";
+  return `Blue: ${list(t.BLUE)} · Red: ${list(t.RED)}`;
 }
 
 function renderRows(tbodyId, players, lane14) {
@@ -554,18 +604,15 @@ function renderRows(tbodyId, players, lane14) {
   }
 }
 
-function kdaRatio(k, d, a) {
-  if (d === 0) return (k + a) > 0 ? { text: "Perfect", cls: "perf" } : { text: "0.0", cls: "" };
-  const r = (k + a) / d;
-  return { text: r.toFixed(1), cls: r >= 4 ? "good" : "" };
-}
-
+// --- formátování ------------------------------------------------------------
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
 function fmtClock(sec) {
   if (!sec && sec !== 0) return "--:--";
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function fmtGold(gold) { return Math.round(Number(gold)).toLocaleString("cs-CZ"); }
+function fmtK(n) { return n >= 1000 ? `${(n / 1000).toFixed(1).replace(".", ",")}k` : String(Math.round(n)); }
 function fmtDiff(diff) {
   const n = Math.round(diff);
   return (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n).toLocaleString("cs-CZ");
@@ -580,7 +627,7 @@ function laneDiff(p, lane14) {
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-// --- navigace (taby) --------------------------------------------------------
+// --- overlaye ---------------------------------------------------------------
 const overlayUrl = (name) => `${location.origin}/overlay/${name}`;
 
 function overlayMock(name) {
@@ -600,30 +647,14 @@ function loadOverlay(name) {
   }
 }
 
+function showOverlays(show) {
+  $("overlaysView").hidden = !show;
+  $("liveView").hidden = show;
+  if (show) loadOverlay("ingame");
+}
+$("overlaysBack").onclick = () => showOverlays(false);
 document.querySelectorAll(".mock-cb").forEach((cb) => (cb.onchange = () => loadOverlay(cb.dataset.mock)));
 
-function activeSub() {
-  const b = document.querySelector(".sub-tab.active");
-  return b ? b.dataset.sub : "ingame";
-}
-
-function switchTab(tab) {
-  document.querySelectorAll(".nav-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  document.querySelectorAll(".tabview").forEach((v) => v.classList.toggle("active", v.dataset.view === tab));
-  if (tab === "overlays") loadOverlay(activeSub()); // načti iframe až při zobrazení
-  if (tab === "dashboard") refreshGames();
-}
-
-function switchSub(sub) {
-  document.querySelectorAll(".sub-tab").forEach((b) => b.classList.toggle("active", b.dataset.sub === sub));
-  document.querySelectorAll(".subview").forEach((v) => v.classList.toggle("active", v.dataset.subview === sub));
-  loadOverlay(sub);
-}
-
-document.querySelectorAll(".nav-tab").forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
-document.querySelectorAll(".sub-tab").forEach((b) => (b.onclick = () => switchSub(b.dataset.sub)));
-
-// URL overlayů + tlačítka kopírovat / otevřít
 $("urlIngame").textContent = overlayUrl("ingame");
 document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
   const text = $(b.dataset.copy).textContent;
@@ -631,44 +662,6 @@ document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () =>
   catch { toast("Kopírování selhalo", "err"); }
 }));
 document.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => window.open($(b.dataset.open).textContent, "_blank")));
-
-// --- produkce (Twitch / Kick) + theme --------------------------------------
-const PRODUCTIONS = {
-  twitch: { label: "Twitch", short: "Twitch", production: "Twitch" },
-  kick: { label: "Kick", short: "Kick", production: "Kick" },
-};
-let production = localStorage.getItem("il_production");
-
-function applyProduction(p) {
-  if (!PRODUCTIONS[p]) return;
-  production = p;
-  localStorage.setItem("il_production", p);
-  // Agent podle produkce vybere token, načte program a zakládá hry.
-  post("/api/production", { production: p });
-  document.body.dataset.prod = p;
-  $("prodSwitch").textContent = PRODUCTIONS[p].label;
-  // předvyplní pole Production v New Game
-  const prodInput = $("production");
-  if (prodInput) {
-    prodInput.value = PRODUCTIONS[p].production;
-  }
-}
-
-function openProdModal() { $("prodModal").hidden = false; }
-function closeProdModal() { $("prodModal").hidden = true; }
-
-document.querySelectorAll(".prod-choice").forEach((b) => (b.onclick = () => {
-  applyProduction(b.dataset.prod);
-  closeProdModal();
-  toast(`Produkce: ${PRODUCTIONS[b.dataset.prod].short}`, "ok");
-}));
-$("prodSwitch").onclick = openProdModal;
-$("prodModal").addEventListener("click", (e) => { if (e.target.id === "prodModal" && production) closeProdModal(); });
-
-// při startu: aplikuj uložený theme (aby UI nebylo bez barvy) a vždy ukaž výběr
-if (production) applyProduction(production);
-else $("prodSwitch").textContent = "Vybrat produkci";
-openProdModal();
 
 // --- verze aplikace (roh) ---------------------------------------------------
 fetch("/api/meta").then((r) => r.json()).then((m) => {
@@ -701,60 +694,11 @@ if (window.electronAPI && window.electronAPI.onUpdate) {
   });
 }
 
-// --- Dashboard --------------------------------------------------------------
-function renderDashRunning(s) {
-  const el = $("dashRunningBody");
-  if (!el) return;
-  const sess = s && s.session;
-  const live = sess && (sess.meta.status === "LIVE" || sess.meta.status === "WAITING_FOR_GAME");
-  if (!sess || !live) {
-    el.innerHTML = '<span class="dash-none">Žádná hra právě neběží.</span>';
-    return;
-  }
-  const m = sess.meta;
-  const dur = sess.live ? sess.live.durationSeconds : 0;
-  const phase = m.status === "LIVE" ? "LIVE" : "WAITING";
-  el.innerHTML =
-    `<div class="dash-run-match">${esc(m.team1)} <span class="vs">vs</span> ${esc(m.team2)}</div>` +
-    `<div class="dash-run-meta"><span class="badge ${m.status === "LIVE" ? "live" : "waiting"}">${phase}</span>` +
-    `<span>Game ${m.gameNumber} · ${esc(m.seriesFormat)}</span>` +
-    (m.status === "LIVE" ? `<span class="clock live">${fmtClock(dur)}</span>` : "") + `</div>`;
-}
-
-const todayISO = new Date().toISOString().slice(0, 10);
-
-async function refreshGames() {
-  try {
-    const games = await fetch("/api/games").then((r) => r.json());
-    const today = games.filter((g) => g.date === todayISO);
-    const played = today.filter((g) => g.ended);
-    fillDashList("dashPlayed", played.map((g) => ({
-      title: g.title,
-      sub: (g.gameNumber ? `Game ${g.gameNumber}` : "") + (g.winner ? ` · 🏆 ${g.winner}` : (g.exported ? "" : " · neexportováno")),
-      cls: g.exported ? "ok" : "",
-    })), "Zatím žádná dohraná hra dnes.");
-  } catch {
-    fillDashList("dashPlayed", [], "Seznam se nepodařilo načíst.");
-  }
-}
-
-function fillDashList(id, items, emptyText) {
-  const el = $(id);
-  if (!el) return;
-  if (!items.length) { el.innerHTML = `<span class="dash-none">${esc(emptyText)}</span>`; return; }
-  el.innerHTML = items.map((it) =>
-    `<div class="dash-item ${it.cls || ""}"><span class="dash-item-t">${esc(it.title)}</span>` +
-    (it.sub ? `<span class="dash-item-s">${esc(it.sub)}</span>` : "") + `</div>`,
-  ).join("");
-}
-
-// datum + placeholdery pro web-napojení
-$("dashDate").textContent = new Date().toLocaleDateString("cs-CZ", {
-  weekday: "long", day: "numeric", month: "long", year: "numeric",
-});
-fillDashList("dashScheduled", [], "Načítám program…");
-fillDashList("dashUpcoming", [], "Načítám program…");
-refreshGames();
+// --- start ------------------------------------------------------------------
+// Uložená produkce se použije hned; okno výběru se ukáže vždy, ať ji produkce potvrdí.
+if (production) applyProduction(production);
+else $("prodSwitch").textContent = "Vybrat produkci";
+openProdModal();
 
 connectWs();
 initDdragon().then(() => { if (state) render(state); }).catch(() => { /* offline → monogramy */ });

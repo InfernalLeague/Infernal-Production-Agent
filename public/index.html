@@ -18,221 +18,144 @@
       <span id="mockBadge" class="badge badge-mock" hidden>MOCK</span>
     </div>
     <div class="topbar-right">
-      <button id="settingsBtn" class="prod-pill settings-pill" title="Napojení na web">⚙ Web</button>
+      <!-- Stav spojení: zelená = v pořádku, šedá = zatím nic, žlutá/červená = co udělat -->
+      <div class="health" id="health">
+        <span class="hp" id="hpClient" title="League klient"><i></i>Klient</span>
+        <span class="hp" id="hpGame" title="Spectate hra"><i></i>Hra</span>
+        <span class="hp" id="hpBroadcast" title="LeagueBroadcast"><i></i>Broadcast</span>
+        <span class="hp" id="hpWeb" title="Web Infernal League"><i></i>Web</span>
+      </div>
       <button id="prodSwitch" class="prod-pill" title="Změnit produkci">—</button>
+      <button id="settingsBtn" class="icon-btn" title="Napojení na web" aria-label="Napojení na web">⚙</button>
+      <div class="menu">
+        <button id="menuBtn" class="icon-btn" title="Další akce" aria-label="Další akce" aria-haspopup="true">⋯</button>
+        <div id="menuList" class="menu-list" hidden>
+          <button data-act="manual">Ruční hra…</button>
+          <button data-act="export">Export .TXT</button>
+          <button data-act="overlays">Overlaye pro OBS</button>
+          <button data-act="refresh">Načíst program znovu</button>
+          <label class="menu-check"><input type="checkbox" id="autoEnabled" checked /> Autopilot</label>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- Hlavní navigace -->
-  <nav class="mainnav">
-    <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
-    <button class="nav-tab" data-tab="collection">Data Collection</button>
-    <button class="nav-tab" data-tab="overlays">Overlays</button>
-    <button class="nav-tab" data-tab="vods">VODs</button>
-  </nav>
+  <!-- Co je potřeba udělat (spusť LeagueBroadcast, token…) -->
+  <div id="issue" class="issue" hidden></div>
 
   <main>
-    <!-- ============ DASHBOARD (landing) ============ -->
-    <section class="tabview active" data-view="dashboard">
-      <div class="dash-head">
-        <div>
-          <div class="dash-kicker">Vítej zpět</div>
-          <h1 class="dash-title">Dashboard</h1>
+    <!-- ============ ŽIVĚ: program + aktuální hra ============ -->
+    <section class="live-view" id="liveView">
+      <aside class="program">
+        <div class="program-head">
+          <span class="program-title">Program</span>
+          <span id="programDate" class="program-date"></span>
         </div>
-        <div class="dash-date" id="dashDate">—</div>
-      </div>
+        <div id="programList" class="program-list"></div>
+      </aside>
 
-      <!-- Právě běží -->
-      <div class="dash-running" id="dashRunning">
-        <div class="dash-card-h"><span class="live-ping"></span> Právě běží</div>
-        <div id="dashRunningBody" class="dash-running-body">
-          <span class="dash-none">Žádná hra právě neběží.</span>
+      <section class="game-card" id="gameCard">
+        <!-- Žádná hra -->
+        <div id="idle" class="idle">
+          <h2 id="idleTitle">Žádná hra</h2>
+          <p id="idleText" class="hint"></p>
         </div>
-      </div>
 
-      <div class="dash-grid">
-        <div class="dash-card">
-          <div class="dash-card-h">Dnešní program</div>
-          <div id="dashScheduled" class="dash-list"></div>
-        </div>
-        <div class="dash-card">
-          <div class="dash-card-h">Čeká nás</div>
-          <div id="dashUpcoming" class="dash-list"></div>
-        </div>
-        <div class="dash-card">
-          <div class="dash-card-h">Dohrané dnes</div>
-          <div id="dashPlayed" class="dash-list"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ DATA COLLECTION ============ -->
-    <section class="tabview" data-view="collection">
-      <div class="collection-bar">
-        <span class="section-title">Data Collection</span>
-        <button id="openNewGame" class="btn btn-ghost btn-sm">+ Ruční hra</button>
-      </div>
-
-      <!-- Autopilot: hry podle programu produkce -->
-      <div class="auto-bar" id="autoBar">
-        <div class="auto-head">
-          <label class="auto-toggle"><input type="checkbox" id="autoEnabled" checked /> <b>Autopilot</b></label>
-          <span id="autoText" class="auto-text">—</span>
-          <button id="autoRefresh" class="btn btn-sm btn-ghost">Načíst program</button>
-        </div>
-        <div id="autoProgram" class="auto-program"></div>
-      </div>
-
-      <!-- Předchozí hra: vítěz jde opravit i poté, co autopilot přešel na další -->
-      <div class="prev-game" id="prevGame" hidden>
-        <span class="field-label">Předchozí hra</span>
-        <span id="prevTitle" class="prev-title"></span>
-        <div id="prevWinner" class="seg"></div>
-        <span id="prevSync" class="web-sync-text"></span>
-        <button id="prevConfirm" class="btn btn-sm btn-primary" hidden>Potvrdit vítěze</button>
-        <button id="prevResend" class="btn btn-sm btn-ghost" hidden>Odeslat znovu</button>
-      </div>
-      <div class="status-grid">
-        <div class="status-cell">
-          <span class="status-label">League Client</span>
-          <span class="status-value"><i class="dot"></i><b id="stClient">—</b></span>
-        </div>
-        <div class="status-cell">
-          <span class="status-label">League Game</span>
-          <span class="status-value"><i class="dot"></i><b id="stGame">—</b></span>
-        </div>
-        <div class="status-cell">
-          <span class="status-label">Live Data API</span>
-          <span class="status-value"><i class="dot"></i><b id="stApi">—</b></span>
-        </div>
-        <div class="status-cell">
-          <span class="status-label">LeagueBroadcast</span>
-          <span class="status-value"><i class="dot"></i><b id="stBroadcast">—</b></span>
-        </div>
-        <div class="status-cell">
-          <span class="status-label">Live Data Output</span>
-          <span class="status-value"><i class="dot"></i><b id="stDelivery">LOCAL TEST</b></span>
-        </div>
-        <div class="status-cell">
-          <span class="status-label">Current Game</span>
-          <span class="status-value"><i class="dot"></i><b id="stCurrent">NONE</b></span>
-        </div>
-      </div>
-
-      <section id="emptyState" class="empty" hidden>
-        <div class="empty-flame">🔥</div>
-        <h2>Žádná aktivní hra</h2>
-        <p id="emptyText">Autopilot připraví hru podle programu produkce. Bez programu jde hra založit ručně.</p>
-        <button id="emptyCreate" class="btn btn-ghost">Založit ručně</button>
-      </section>
-
-      <section id="gamePanel" class="panel" hidden>
-        <div class="game-head">
+        <!-- Hra: hlavička -->
+        <div id="gameHead" class="gc-head" hidden>
           <div>
             <div class="matchup"><span id="mTeam1"></span> <span class="vs">vs</span> <span id="mTeam2"></span></div>
             <div class="submeta"><span id="mGame"></span> · <span id="mId"></span></div>
           </div>
           <div class="game-state">
-            <span id="dataSourceBadge" class="source-pill">ČEKÁM NA DATA</span>
             <span id="firstBlood" class="fb-pill" hidden></span>
             <span id="phaseBadge" class="badge">—</span>
             <span id="clock" class="clock">--:--</span>
           </div>
         </div>
 
-        <div class="sb-header">
-          <div class="sb-team blue">
-            <span class="tag side-blue">BLUE</span>
-            <span class="sb-team-meta"><span class="sb-team-name" id="blueTeamName">—</span><span class="sb-team-gold" id="blueGold">— gold</span><span class="sb-team-obj" id="blueObj"></span></span>
+        <!-- Čekání na start -->
+        <div id="waitBox" class="wait-box" hidden>
+          <div class="sides">
+            <span class="tag side-blue">BLUE</span> <b id="waitBlue"></b>
+            <span class="sides-vs">vs</span>
+            <b id="waitRed"></b> <span class="tag side-red">RED</span>
           </div>
-          <div class="sb-score">
-            <span class="s-blue" id="blueKills">0</span>
-            <span class="s-dash">–</span>
-            <span class="s-red" id="redKills">0</span>
-          </div>
-          <div class="sb-team red">
-            <span class="sb-team-meta"><span class="sb-team-name" id="redTeamName">—</span><span class="sb-team-gold" id="redGold">— gold</span><span class="sb-team-obj" id="redObj"></span></span>
-            <span class="tag side-red">RED</span>
-          </div>
+          <p id="waitText" class="hint"></p>
         </div>
 
-        <div class="scoreboards">
-          <div class="team-block accent-blue">
-            <table class="sb">
-              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>CS</th><th>Gold</th><th>Items</th></tr></thead>
-              <tbody id="blueRows"></tbody>
-            </table>
-          </div>
-          <div class="team-block accent-red">
-            <table class="sb">
-              <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>CS</th><th>Gold</th><th>Items</th></tr></thead>
-              <tbody id="redRows"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="export-bar">
-          <div class="winner-pick">
-            <span class="field-label">Winner <span id="winnerAuto" class="winner-auto" hidden>· odhad agenta, zkontroluj</span></span>
-            <div class="winner-row">
-              <div id="winnerSeg" class="seg"></div>
-              <button id="winnerConfirm" class="btn btn-sm btn-primary" hidden>Potvrdit</button>
-            </div>
-          </div>
-          <div class="web-sync" id="webSync" hidden>
-            <span class="field-label">Web</span>
+        <!-- Konec hry: potvrzení vítěze -->
+        <div id="winnerBox" class="winner-box" hidden>
+          <div class="winner-q" id="winnerQ">Kdo vyhrál?</div>
+          <div id="winnerBtns" class="winner-btns"></div>
+          <div class="winner-foot">
             <span id="webSyncText" class="web-sync-text">—</span>
             <button id="webResendBtn" class="btn btn-sm btn-ghost" hidden>Odeslat znovu</button>
           </div>
-          <div class="export-actions">
-            <button id="endBtn" class="btn">Ukončit hru ručně</button>
-            <button id="exportBtn" class="btn btn-primary">EXPORT .TXT</button>
-            <span id="deliveryNote" class="delivery-note">Live stream: local test log</span>
-          </div>
         </div>
-        <p class="hint" id="exportHint"></p>
+
+        <!-- Souhrn hry -->
+        <div id="summary" class="summary" hidden>
+          <div class="tile"><span>Killy</span><b><em class="s-blue" id="blueKills">0</em> : <em class="s-red" id="redKills">0</em></b></div>
+          <div class="tile"><span>Gold</span><b id="goldDiff">—</b></div>
+          <div class="tile"><span>Draci</span><b id="dragons">0 : 0</b></div>
+          <div class="tile"><span>Baroni</span><b id="barons">0 : 0</b></div>
+          <div class="tile"><span>Věže</span><b id="towers">0 : 0</b></div>
+        </div>
+        <p id="liveNote" class="hint live-note" hidden></p>
+
+        <details id="boards" class="boards" hidden>
+          <summary>Hráči</summary>
+          <div class="scoreboards">
+            <div class="team-block accent-blue">
+              <div class="tb-head"><span class="tag side-blue">BLUE</span> <b id="blueTeamName">—</b></div>
+              <table class="sb">
+                <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>CS</th><th>Gold</th><th>Items</th></tr></thead>
+                <tbody id="blueRows"></tbody>
+              </table>
+            </div>
+            <div class="team-block accent-red">
+              <div class="tb-head"><span class="tag side-red">RED</span> <b id="redTeamName">—</b></div>
+              <table class="sb">
+                <thead><tr><th>Player</th><th>Lvl</th><th>K / D / A</th><th>CS</th><th>Gold</th><th>Items</th></tr></thead>
+                <tbody id="redRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <div id="gameActions" class="gc-actions" hidden>
+          <button id="endBtn" class="btn btn-sm btn-ghost">Ukončit hru ručně</button>
+          <span id="exportHint" class="hint"></span>
+        </div>
       </section>
     </section>
 
-    <!-- ============ OVERLAYS ============ -->
-    <section class="tabview" data-view="overlays">
-      <nav class="subnav">
-        <button class="sub-tab active" data-sub="ingame">Ingame</button>
-      </nav>
-
-      <div class="subview active" data-subview="ingame">
-        <div class="overlay-bar">
-          <span class="overlay-label">OBS Browser Source URL</span>
-          <code class="overlay-url" id="urlIngame"></code>
-          <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlIngame">Kopírovat</button>
-          <button class="btn btn-sm btn-ghost" data-open="urlIngame">Otevřít</button>
-          <label class="mock-toggle"><input type="checkbox" class="mock-cb" data-mock="ingame" checked /> Náhled s mock daty</label>
-        </div>
-        <p class="hint">Náhled běží na mock datech. Pro živý provoz odškrtni mock — ingame overlay pak potřebuje běžící <b>LeagueBroadcast</b> (localhost:58869).</p>
-        <div class="overlay-preview"><iframe data-lazy="ingame" title="Ingame overlay"></iframe></div>
+    <!-- ============ OVERLAYE (z menu) ============ -->
+    <section class="overlays-view" id="overlaysView" hidden>
+      <div class="ov-head">
+        <button id="overlaysBack" class="btn btn-sm btn-ghost">← Zpět</button>
+        <span class="section-title">Overlaye pro OBS</span>
       </div>
-    </section>
-
-    <!-- ============ VODS ============ -->
-    <section class="tabview" data-view="vods">
-      <div class="soon">
-        <div class="empty-flame">🎬</div>
-        <h2>VODs — již brzy</h2>
-        <p>Automatické stříhání záznamu streamu podle rozpoznaných her (Fáze 4).<br>
-           Agent zná časy her z live dat, takže půjde přes OBS WebSocket rozdělit
-           nahrávku na jednotlivé zápasy — později i auto-thumbnaily a upload na YouTube.</p>
+      <div class="overlay-bar">
+        <span class="overlay-label">Ingame · OBS Browser Source URL</span>
+        <code class="overlay-url" id="urlIngame"></code>
+        <button class="btn btn-sm btn-ghost copy-btn" data-copy="urlIngame">Kopírovat</button>
+        <button class="btn btn-sm btn-ghost" data-open="urlIngame">Otevřít</button>
+        <label class="mock-toggle"><input type="checkbox" class="mock-cb" data-mock="ingame" checked /> Náhled s mock daty</label>
       </div>
+      <p class="hint">Náhled běží na mock datech. Pro živý provoz odškrtni mock — ingame overlay pak potřebuje běžící <b>LeagueBroadcast</b> (localhost:58869).</p>
+      <div class="overlay-preview"><iframe data-lazy="ingame" title="Ingame overlay"></iframe></div>
     </section>
   </main>
 
-  <footer class="foot">Primární live zdroj: LeagueBroadcast WebSocket. Riot Live API zůstává jako záloha. Finální <code>.txt</code> export je zachovaný.</footer>
   <div class="version-badge" id="versionBadge" hidden></div>
 
   <!-- NEW GAME MODAL -->
   <div id="newGameModal" class="modal" hidden>
     <div class="modal-card">
       <div class="modal-head">
-        <h2>New Game</h2>
+        <h2>Ruční hra</h2>
         <button id="closeNewGame" class="modal-close" aria-label="Zavřít">✕</button>
       </div>
       <div class="web-pick">
@@ -265,7 +188,7 @@
       </div>
       <div class="modal-actions">
         <p class="hint" id="createHint"></p>
-        <button id="createBtn" class="btn btn-primary">CREATE GAME</button>
+        <button id="createBtn" class="btn btn-primary">Založit hru</button>
       </div>
     </div>
   </div>
