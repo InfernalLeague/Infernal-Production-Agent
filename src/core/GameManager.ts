@@ -29,7 +29,7 @@ import type { DamageField, DamageProbe } from "../live/damageProbe.js";
 /** Jak často jde živý stav běžící hry na web. */
 const LIVE_WEB_INTERVAL_MS = 5000;
 import { submitLive, submitResult, WebApiError } from "../web/WebClient.js";
-import { loadWebSettings, publicWebSettings } from "../web/settings.js";
+import { publicWebSettings, tokenFor } from "../web/settings.js";
 
 /**
  * GameManager: orchestrátor Fáze 1A.
@@ -75,10 +75,37 @@ export class GameManager extends EventEmitter {
 
   // --- vytvoření hry (workflow §5–§7) --------------------------------------
 
-  createGame(input: CreateGameInput): GameMeta {
-    if (this.session && this.session.status !== "EXPORTED") {
-      throw new Error("Nejdřív ukonči a exportuj aktuální hru. Nová hra by přepsala rozpracovaná data.");
+  /**
+   * Smí nová hra nahradit aktuální? Ano, když žádná není, když ještě
+   * nezačala (čeká na hru, žádná data), nebo když skončila a její výsledek
+   * je vyřízený — zapsaný na webu, webem odmítnutý, nebo hra na web nepatří
+   * (data zůstávají ve složce hry). Dohraná hra, které chybí vítěz nebo se
+   * výsledek ještě odesílá, se nahradit nesmí.
+   */
+  canReplaceSession(): boolean {
+    const s = this.session;
+    if (!s || s.status === "EXPORTED") return true;
+    if (s.status === "WAITING_FOR_GAME" || s.status === "CREATED") return !s.currentLive;
+    if (s.status !== "GAME_ENDED") return false;
+    if (!s.meta.web) return true;
+    return s.webSync.state === "ok" || s.webSync.state === "rejected";
+  }
+
+  /** Aktuální hra (pro autopilota). */
+  currentSession(): GameSession | null {
+    return this.session;
+  }
+
+  createGame(input: CreateGameInput & { auto?: boolean; previousDuration?: number | null }): GameMeta {
+    if (!this.canReplaceSession()) {
+      throw new Error(
+        this.session?.status === "LIVE"
+          ? "Právě běží hra. Nová hra by přepsala rozpracovaná data."
+          : "Aktuální hra čeká na vítěze nebo na zápis na web. Nejdřív ji dokonči.",
+      );
     }
+    const ended = this.session;
+    if (ended?.meta.web && ended.finalSnapshot) this.previous = ended;
     const team1 = input.team1.trim();
     const team2 = input.team2.trim();
     if (!team1 || !team2) throw new Error("Názvy obou týmů jsou povinné.");
@@ -98,6 +125,8 @@ export class GameManager extends EventEmitter {
       createdAt,
       status: "WAITING_FOR_GAME",
       web: input.web ?? null,
+      auto: input.auto ?? false,
+      previousDuration: input.previousDuration ?? null,
     };
     const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber, meta.localGameId);
     fs.mkdirSync(folder, { recursive: true });
@@ -105,30 +134,94 @@ export class GameManager extends EventEmitter {
     this.liveWeb = { state: "idle", message: null, at: null, gameTime: null };
     this.damage = { fields: new Set(), samples: 0, lastWrittenAt: 0 };
     this.publisher.beginGame(meta, folder);
-    log.info(`Nová hra: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`);
+    log.info(
+      `Nová hra${meta.auto ? " (autopilot)" : ""}: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`,
+    );
     this.emitUpdate();
     return meta;
   }
 
-  setWinner(name: string | null): void {
-    if (!this.session) return;
-    if (name !== null && name !== this.session.meta.team1 && name !== this.session.meta.team2) {
-      throw new Error("Vítěz musí být jeden z týmů aktuální hry.");
+  /**
+   * Autopilot doplní hru, která ještě nezačala, podle čerstvého programu:
+   * strany se na webu mění volbou strany v draftu až těsně před hrou.
+   * Po startu hry se nic nemění — vítěz se ukládá jménem týmu.
+   */
+  updateWaitingGame(update: Pick<GameMeta, "team1" | "team2" | "team1Side" | "seriesFormat">): void {
+    const s = this.session;
+    if (!s || (s.status !== "WAITING_FOR_GAME" && s.status !== "CREATED") || s.currentLive) return;
+    const m = s.meta;
+    if (
+      m.team1 === update.team1 &&
+      m.team2 === update.team2 &&
+      m.team1Side === update.team1Side &&
+      m.seriesFormat === update.seriesFormat
+    ) {
+      return;
     }
-    const changed = name !== this.session.winner;
-    this.session.setWinner(name);
+    Object.assign(m, update);
+    log.info(`${m.localGameId}: podle webu ${m.team1} (${m.team1Side}) vs ${m.team2}`);
+    this.emitUpdate();
+  }
+
+  /** Stav autopilota pro dashboard (dodá ho Autopilot). */
+  private autopilotState: () => unknown = () => null;
+
+  setAutopilotState(provider: () => unknown): void {
+    this.autopilotState = provider;
+  }
+
+  /** Překreslení dashboardu zvenčí (autopilot načetl program…). */
+  notify(): void {
+    this.emitUpdate();
+  }
+
+  /**
+   * Patří data v čekající hře ještě předchozí hře?
+   *
+   * Po konci hry klient zůstává na výsledkové obrazovce a Live API dál vrací
+   * dohranou hru (s eventem GameEnd a zastaveným časem). Autopilot mezitím
+   * založí další hru — ta by jinak hned „začala“ se starými daty. Nová hra
+   * se pozná tak, že předchozí zmizela (API přestalo odpovídat, LeagueBroadcast
+   * hlásil OutOfGame), nebo podle herního času, který je výrazně pod délkou
+   * předchozí hry — spectator se připojuje v prvních minutách.
+   */
+  private isPreviousGameData(s: GameSession, gameTime: number | null, gameEnded: boolean): boolean {
+    if (s.status !== "WAITING_FOR_GAME" && s.status !== "CREATED") return false;
+    if (gameEnded) return true;
+    const previous = s.meta.previousDuration;
+    if (previous == null || s.previousGameGone || gameTime == null) return false;
+    return gameTime >= previous - 30;
+  }
+
+  /** Aktuální hra, nebo předchozí dohraná (`previous`), kterou autopilot už nahradil. */
+  private target(which: "current" | "previous"): GameSession | null {
+    return which === "previous" ? this.previous : this.session;
+  }
+
+  /**
+   * Vítěz hry. Stejný vítěz, jakého Agent odhadl, jen potvrdí odhad
+   * (zdroj „manual“) a na web se znovu neposílá.
+   */
+  setWinner(name: string | null, which: "current" | "previous" = "current"): void {
+    const s = this.target(which);
+    if (!s) return;
+    if (name !== null && name !== s.meta.team1 && name !== s.meta.team2) {
+      throw new Error("Vítěz musí být jeden z týmů hry.");
+    }
+    const changed = name !== s.winner;
+    s.setWinner(name);
     this.emitUpdate();
     // Změna vítěze po konci hry jde na web znovu (produkce opravuje výsledek).
     // Potvrzení téhož vítěze (i odhadnutého) se neposílá, web by ho zapsal
     // jako opravu. Znovu odeslat jde tlačítkem „Odeslat znovu“.
-    if (changed && (this.session.status === "GAME_ENDED" || this.session.status === "EXPORTED")) {
-      void this.syncResult("změna vítěze");
+    if (changed && (s.status === "GAME_ENDED" || s.status === "EXPORTED")) {
+      void this.syncResult("změna vítěze", s);
     }
   }
 
   /** Ruční opětovné odeslání výsledku na web (tlačítko v dashboardu). */
-  resendResult(): void {
-    void this.syncResult("ručně");
+  resendResult(which: "current" | "previous" = "current"): void {
+    void this.syncResult("ručně", this.target(which));
   }
 
   /** Ruční ukončení hry operátorem (kdyby autodetekce nestačila). */
@@ -144,6 +237,8 @@ export class GameManager extends EventEmitter {
     if (!this.session) return; // data ignorujeme, dokud operátor nezaložil hru
     const s = this.session;
     if (s.status !== "WAITING_FOR_GAME" && s.status !== "CREATED" && s.status !== "LIVE") return;
+    const gameEnded = (data.events?.Events ?? []).some((event) => event.EventName === "GameEnd");
+    if (this.isPreviousGameData(s, data.gameData?.gameTime ?? null, gameEnded)) return;
 
     // Event stream Live API (objektivy, pentakilly, first blood) se čte vždy.
     // LeagueBroadcast je primární jen pro statistiky hráčů — objektivy
@@ -178,6 +273,7 @@ export class GameManager extends EventEmitter {
   private onBroadcastSnapshot(snapshot: BroadcastGameSnapshot): void {
     const s = this.session;
     if (!s || (s.status !== "CREATED" && s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
+    if (this.isPreviousGameData(s, snapshot.gameTime, false)) return;
     const wasWaiting = s.status !== "LIVE";
     const { goldSample, laneGold } = s.applyBroadcast(snapshot);
     if (wasWaiting) log.info(`${s.meta.localGameId}: LeagueBroadcast detekoval hru → LIVE`);
@@ -220,6 +316,7 @@ export class GameManager extends EventEmitter {
   private onBroadcastEvent(event: BroadcastGameEvent): void {
     const s = this.session;
     if (!s || (s.status !== "WAITING_FOR_GAME" && s.status !== "LIVE")) return;
+    if (this.isPreviousGameData(s, event.gameTime, false)) return;
     this.publisher.publishEvent(event);
     this.publishObjectives(s.applyBroadcastEvent(event), "league-broadcast");
 
@@ -323,6 +420,9 @@ export class GameManager extends EventEmitter {
       this.endCurrentGame("LeagueBroadcast oznámil konec hry");
       return;
     }
+    if (status === GameState.OutOfGame && this.session && this.session.status !== "LIVE") {
+      this.session.previousGameGone = true;
+    }
     if (status === GameState.OutOfGame && this.session?.status === "LIVE") {
       // BlueBottle používá OutOfGame i při pouhém odpojení socketu. Krátká
       // prodleva rozliší skutečný stav serveru (socket zůstane připojený) od
@@ -339,6 +439,7 @@ export class GameManager extends EventEmitter {
 
   private onUnreachable(): void {
     const s = this.session;
+    if (s && (s.status === "WAITING_FOR_GAME" || s.status === "CREATED")) s.previousGameGone = true;
     if (!s || s.status !== "LIVE") {
       this.emitUpdate();
       return;
@@ -371,7 +472,6 @@ export class GameManager extends EventEmitter {
     this.emitUpdate();
   }
 
-  private syncTimer: NodeJS.Timeout | null = null;
 
   // --- živý stav hry na web -----------------------------------------------
 
@@ -394,14 +494,19 @@ export class GameManager extends EventEmitter {
   private async pushLiveToWeb(): Promise<void> {
     const s = this.session;
     if (!s || s.status !== "LIVE" || !s.meta.web || this.liveWebSending) return;
-    if (!loadWebSettings().token) return;
+    if (!tokenFor(s.meta.web.production ?? null)) return;
     const snapshot = this.snapshotFromLive(s);
     if (!snapshot) return;
 
     this.liveWebSending = true;
     const gameTime = Math.round(snapshot.durationSeconds);
     try {
-      await submitLive(s.meta.web.gameId, buildConfirmedGame(s.meta, snapshot, s.winner, s.winnerSource), gameTime);
+      await submitLive(
+        s.meta.web.gameId,
+        buildConfirmedGame(s.meta, snapshot, s.winner, s.winnerSource),
+        gameTime,
+        s.meta.web.production ?? null,
+      );
       if (this.liveWeb.state !== "ok") log.info(`${s.meta.localGameId}: živý stav se posílá na web.`);
       this.liveWeb = { state: "ok", message: null, at: new Date().toISOString(), gameTime };
     } catch (error) {
@@ -459,7 +564,8 @@ export class GameManager extends EventEmitter {
     );
   }
 
-  private syncAgain = false;
+  /** Dohraná hra, kterou autopilot nahradil další — vítěz jde dál opravit. */
+  private previous: GameSession | null = null;
 
   /**
    * Výsledek hry na web: zapíše se a hra se na webu rovnou potvrdí.
@@ -469,15 +575,14 @@ export class GameManager extends EventEmitter {
    * výsledek už převzal admin…), opakování nepomůže — dashboard ukáže
    * hlášku z webu a operátor rozhodne.
    */
-  private async syncResult(reason: string): Promise<void> {
-    const s = this.session;
+  private async syncResult(reason: string, s: GameSession | null = this.session): Promise<void> {
     if (!s?.meta.web || !s.finalSnapshot) return;
     if (s.webSync.state === "sending") {
-      this.syncAgain = true;
+      s.syncAgain = true;
       return;
     }
-    if (this.syncTimer) clearTimeout(this.syncTimer);
-    this.syncTimer = null;
+    if (s.syncTimer) clearTimeout(s.syncTimer);
+    s.syncTimer = null;
 
     if (!s.winner) {
       s.webSync = { ...s.webSync, state: "error", message: "Chybí vítěz — zvol ho a výsledek se odešle.", at: new Date().toISOString() };
@@ -491,7 +596,7 @@ export class GameManager extends EventEmitter {
     writeJsonAtomic(path.join(s.folder, "confirmed.json"), confirmed);
 
     try {
-      const result = await submitResult(s.meta.web.gameId, confirmed);
+      const result = await submitResult(s.meta.web.gameId, confirmed, s.meta.web.production ?? null);
       s.webSync = {
         state: "ok",
         message: null,
@@ -500,20 +605,22 @@ export class GameManager extends EventEmitter {
         at: new Date().toISOString(),
       };
       log.info(`${s.meta.localGameId}: výsledek zapsán na web (${reason}, revize ${result.revision}, spárováno ${result.matched})`);
+      // Web po zápisu vítěze sám založí další hru série — autopilot si pro ni sáhne.
+      this.emit("resultSynced");
     } catch (error) {
       const retryable = error instanceof WebApiError ? error.retryable : true;
       const message = error instanceof Error ? error.message : String(error);
       s.webSync = { ...s.webSync, state: retryable ? "error" : "rejected", message, at: new Date().toISOString() };
       log.warn(`${s.meta.localGameId}: výsledek se na web nezapsal (${reason}): ${message}`);
       if (retryable) {
-        this.syncTimer = setTimeout(() => void this.syncResult("opakování"), 30_000);
+        s.syncTimer = setTimeout(() => void this.syncResult("opakování", s), 30_000);
       }
     }
     this.emitUpdate();
 
-    if (this.syncAgain) {
-      this.syncAgain = false;
-      void this.syncResult("čekající změna");
+    if (s.syncAgain) {
+      s.syncAgain = false;
+      void this.syncResult("čekající změna", s);
     }
   }
 
@@ -602,8 +709,10 @@ export class GameManager extends EventEmitter {
       leagueBroadcast: this.broadcast.getStatus(),
       liveDelivery: this.publisher.getStatus(),
       session: this.session ? this.session.toClient() : null,
+      previous: this.previous ? this.previous.toClient() : null,
       liveWeb: this.liveWeb,
       web: publicWebSettings(),
+      autopilot: this.autopilotState(),
     };
   }
 

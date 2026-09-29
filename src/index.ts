@@ -5,13 +5,14 @@ import { LiveClientApi } from "./league/LiveClientApi.js";
 import { MockLiveClient } from "./league/MockLiveClient.js";
 import type { LiveDataSource } from "./league/LiveDataSource.js";
 import { GameManager } from "./core/GameManager.js";
+import { Autopilot } from "./core/Autopilot.js";
 import { startServer } from "./server/server.js";
 import { LeagueBroadcastCollector } from "./live/LeagueBroadcastCollector.js";
 import { LiveStreamPublisher } from "./live/LiveStreamPublisher.js";
 
 /**
  * Vstupní bod Infernal Production Agenta.
- * Sestaví: zdroj dat → collector → game manager → web server.
+ * Sestaví: zdroj dat → collector → game manager (+ autopilot) → web server.
  */
 function main(): void {
   log.info(`Infernal Production Agent v${config.version}`);
@@ -28,8 +29,10 @@ function main(): void {
   );
   const publisher = new LiveStreamPublisher();
   const manager = new GameManager(collector, broadcast, publisher);
+  const autopilot = new Autopilot(manager);
   manager.start();
-  startServer(manager);
+  autopilot.start();
+  startServer(manager, autopilot);
 }
 
 main();

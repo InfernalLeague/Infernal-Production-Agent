@@ -6,9 +6,10 @@ import { WebSocketServer, WebSocket } from "ws";
 import { config } from "../config.js";
 import { log } from "../util/logger.js";
 import type { GameManager } from "../core/GameManager.js";
+import type { Autopilot } from "../core/Autopilot.js";
 import type { CreateGameInput, WebGameLink } from "../types.js";
 import { fetchSchedule } from "../web/WebClient.js";
-import { publicWebSettings, saveWebSettings } from "../web/settings.js";
+import { getActiveProduction, productionKeyOf, publicWebSettings, saveWebSettings } from "../web/settings.js";
 
 /**
  * Lokální web server Fáze 1A:
@@ -16,7 +17,7 @@ import { publicWebSettings, saveWebSettings } from "../web/settings.js";
  *  - REST pro akce operátora,
  *  - WebSocket pro živé aktualizace stavu (1×/s+ při LIVE).
  */
-export function startServer(manager: GameManager): void {
+export function startServer(manager: GameManager, autopilot: Autopilot): void {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
   app.use(express.static(config.paths.public));
@@ -47,7 +48,7 @@ export function startServer(manager: GameManager): void {
         seriesFormat: b.seriesFormat || "BO5",
         production: b.production,
         team1Side: b.team1Side === "RED" ? "RED" : "BLUE",
-        web: parseWebLink(b.web),
+        web: parseWebLink(b.web, getActiveProduction()),
       });
       res.json({ ok: true, meta });
     } catch (err) {
@@ -58,32 +59,45 @@ export function startServer(manager: GameManager): void {
   app.post("/api/game/winner", (req, res) => {
     try {
       const winner = (req.body?.winner ?? null) as string | null;
-      manager.setWinner(winner || null);
+      manager.setWinner(winner || null, whichGame(req.body?.which));
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
   });
 
-  // Napojení na web: adresa a token produkce (token se nikdy nevrací celý).
+  // Napojení na web: adresa a tokeny produkcí (token se nikdy nevrací celý).
   app.get("/api/settings/web", (_req, res) => res.json(publicWebSettings()));
   app.post("/api/settings/web", (req, res) => {
-    const body = req.body as { webUrl?: string; token?: string | null };
-    res.json(saveWebSettings({ webUrl: body.webUrl, token: body.token }));
+    const body = req.body as { webUrl?: string; tokens?: { twitch?: string | null; kick?: string | null } };
+    const saved = saveWebSettings({ webUrl: body.webUrl, tokens: body.tokens });
+    autopilot.settingsChanged();
+    res.json(saved);
   });
 
-  // Program produkce z webu pro výběr hry v New Game.
+  // Produkce vybraná v dashboardu: podle ní autopilot načítá program.
+  app.post("/api/production", (req, res) => {
+    autopilot.setProduction(productionKeyOf(req.body?.production));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/autopilot", (req, res) => {
+    autopilot.setEnabled(Boolean(req.body?.enabled));
+    res.json({ ok: true });
+  });
+
+  // Program produkce z webu (New Game, test tokenu v Nastavení).
   app.get("/api/web/schedule", async (req, res) => {
     try {
       const date = typeof req.query.date === "string" ? req.query.date : undefined;
-      res.json(await fetchSchedule(date));
+      res.json(await fetchSchedule(date, productionKeyOf(req.query.production)));
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });
     }
   });
 
-  app.post("/api/game/sync", (_req, res) => {
-    manager.resendResult();
+  app.post("/api/game/sync", (req, res) => {
+    manager.resendResult(whichGame(req.body?.which));
     res.json({ ok: true });
   });
 
@@ -121,11 +135,21 @@ export function startServer(manager: GameManager): void {
   });
 }
 
-function parseWebLink(value: unknown): WebGameLink | null {
+function parseWebLink(value: unknown, production: WebGameLink["production"] | null): WebGameLink | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Partial<WebGameLink>;
   if (typeof v.gameId !== "string" || typeof v.matchId !== "string") return null;
-  return { gameId: v.gameId, matchId: v.matchId, label: typeof v.label === "string" ? v.label : "" };
+  return {
+    gameId: v.gameId,
+    matchId: v.matchId,
+    label: typeof v.label === "string" ? v.label : "",
+    ...(production ? { production } : {}),
+  };
+}
+
+/** Akce vítěze míří na aktuální hru, nebo na předchozí, kterou už autopilot nahradil. */
+function whichGame(value: unknown): "current" | "previous" {
+  return value === "previous" ? "previous" : "current";
 }
 
 /**

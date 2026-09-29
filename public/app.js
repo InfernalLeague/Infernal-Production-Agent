@@ -30,6 +30,8 @@ function itemIcon(itemId) {
 // --- WebSocket: živý stav ---------------------------------------------------
 function connectWs() {
   const ws = new WebSocket(`ws://${location.host}/ws`);
+  // Po restartu agenta (aktualizace) si produkci znovu řekne dashboard.
+  ws.onopen = () => { if (production) post("/api/production", { production }); };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "state") render(msg.data);
@@ -81,6 +83,14 @@ $("createBtn").onclick = async () => {
 $("endBtn").onclick = () => post("/api/game/end");
 $("webResendBtn").onclick = () => post("/api/game/sync");
 
+// Autopilot a předchozí hra.
+$("autoEnabled").onchange = () => post("/api/autopilot", { enabled: $("autoEnabled").checked });
+$("autoRefresh").onclick = () => { if (production) post("/api/production", { production }); post("/api/autopilot", { enabled: $("autoEnabled").checked }); };
+// Potvrzení odhadnutého vítěze: stejný tým znovu = zdroj „manual“, na web se znovu neposílá.
+$("winnerConfirm").onclick = () => post("/api/game/winner", { winner: currentWinner });
+$("prevConfirm").onclick = () => state && state.previous && post("/api/game/winner", { winner: state.previous.winner, which: "previous" });
+$("prevResend").onclick = () => post("/api/game/sync", { which: "previous" });
+
 // --- napojení na web ---------------------------------------------------------
 function openSettings() {
   $("settingsModal").hidden = false;
@@ -88,8 +98,11 @@ function openSettings() {
   $("settingsHint").textContent = "";
   fetch("/api/settings/web").then((r) => r.json()).then((w) => {
     $("webUrl").value = w.webUrl || "";
-    $("webToken").value = "";
-    $("webToken").placeholder = w.hasToken ? `uložený token …${w.tokenHint} (nech prázdné, pokud neměníš)` : "ilpa_…";
+    for (const [key, id] of [["twitch", "webTokenTwitch"], ["kick", "webTokenKick"]]) {
+      const t = (w.tokens && w.tokens[key]) || {};
+      $(id).value = "";
+      $(id).placeholder = t.hasToken ? `uložený token …${t.tokenHint} (nech prázdné, pokud neměníš)` : "ilpa_…";
+    }
   });
 }
 function closeSettings() { $("settingsModal").hidden = true; }
@@ -98,8 +111,9 @@ $("closeSettings").onclick = closeSettings;
 $("settingsModal").addEventListener("click", (e) => { if (e.target.id === "settingsModal") closeSettings(); });
 
 async function saveSettings() {
-  const body = { webUrl: $("webUrl").value };
-  if ($("webToken").value.trim()) body.token = $("webToken").value.trim();
+  const body = { webUrl: $("webUrl").value, tokens: {} };
+  if ($("webTokenTwitch").value.trim()) body.tokens.twitch = $("webTokenTwitch").value.trim();
+  if ($("webTokenKick").value.trim()) body.tokens.kick = $("webTokenKick").value.trim();
   const { ok } = await post("/api/settings/web", body);
   return ok;
 }
@@ -120,16 +134,28 @@ $("testWebBtn").onclick = async () => {
   hint.className = "hint";
   hint.textContent = "Zkouším…";
   await saveSettings();
-  const res = await fetch("/api/web/schedule");
-  const data = await res.json().catch(() => ({}));
-  if (res.ok) {
-    const games = (data.matches || []).reduce((n, m) => n + m.games.length, 0);
-    hint.textContent = `Spojení funguje — ${data.production === 2 ? "Kick" : "Twitch"}, dnes ${(data.matches || []).length} zápasů, ${games} her.`;
-    hint.classList.add("ok");
-  } else {
-    hint.textContent = data.error || "Spojení selhalo.";
-    hint.classList.add("err");
+  // Otestuje token každé produkce, která nějaký má.
+  const w = await fetch("/api/settings/web").then((r) => r.json()).catch(() => ({}));
+  const lines = [];
+  let failed = false;
+  for (const key of ["twitch", "kick"]) {
+    if (!(w.tokens && w.tokens[key] && w.tokens[key].hasToken)) continue;
+    const label = PRODUCTIONS[key].label;
+    const res = await fetch(`/api/web/schedule?production=${key}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      failed = true;
+      lines.push(`${label}: ${data.error || "spojení selhalo"}`);
+    } else if (data.production !== (key === "kick" ? 2 : 1)) {
+      failed = true;
+      lines.push(`${label}: token patří produkci ${data.production === 2 ? "Kick" : "Twitch"}`);
+    } else {
+      const games = (data.matches || []).reduce((n, m) => n + m.games.length, 0);
+      lines.push(`${label}: funguje, dnes ${(data.matches || []).length} zápasů, ${games} her`);
+    }
   }
+  hint.textContent = lines.length ? lines.join(" · ") : "Není uložený žádný token.";
+  hint.classList.add(failed || !lines.length ? "err" : "ok");
 };
 
 // Výběr hry z programu produkce (New Game).
@@ -250,6 +276,10 @@ function render(s) {
     statusValue($("stDelivery"), "LOCAL TEST", "ok");
   }
 
+  renderAutopilot(s);
+  renderPrevious(s);
+  renderDashProgram(s);
+
   if (!sess) {
     statusValue($("stCurrent"), "NONE", "bad");
     $("gamePanel").hidden = true;
@@ -312,7 +342,9 @@ function render(s) {
 
   renderWinner(m, sess.winner);
   // Vítěz předvyplněný odhadem po konci hry (poslední zbouraná budova).
-  $("winnerAuto").hidden = !(sess.winner && sess.winnerSource === "auto");
+  const autoWinner = Boolean(sess.winner && sess.winnerSource === "auto");
+  $("winnerAuto").hidden = !autoWinner;
+  $("winnerConfirm").hidden = !autoWinner;
 
   // live tabulky
   const live = sess.live;
@@ -355,6 +387,114 @@ function render(s) {
   $("exportBtn").disabled = players.length === 0;
 }
 
+// --- autopilot --------------------------------------------------------------
+const PROGRAM_STATE = {
+  done: "dohráno", current: "právě teď", next: "na řadě", upcoming: "později",
+  annulled: "anulováno", admin: "zapsal admin", pending: "hra zatím nezaložená",
+};
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+
+function autopilotText(s) {
+  const a = s.autopilot;
+  const sess = s.session;
+  if (!a || !a.production) return { text: "Vyber produkci v horní liště — podle ní se načte program.", cls: "warn" };
+  if (a.error) return { text: a.error, cls: "err" };
+  if (!a.enabled) return { text: "Vypnutý — hry zakládáš ručně.", cls: "" };
+  if (sess) {
+    const label = sess.meta.web ? sess.meta.web.label : `${sess.meta.team1} vs ${sess.meta.team2} · Game ${sess.meta.gameNumber}`;
+    const st = sess.meta.status;
+    if (st === "LIVE") return { text: `● Sbírám data: ${label}`, cls: "live" };
+    if (st === "WAITING_FOR_GAME" || st === "CREATED") {
+      return { text: `Čekám na start hry: ${label}. Jakmile spectate naběhne, začnu sám.`, cls: "ok" };
+    }
+    if (st === "GAME_ENDED" && sess.meta.web) {
+      if (!sess.winner) return { text: `${label} skončila — zvol vítěze, pak přejdu na další hru.`, cls: "warn" };
+      const sync = sess.webSync || {};
+      if (sync.state === "error") return { text: `Výsledek se nezapsal: ${sync.message || "chyba"} — zkouším znovu.`, cls: "warn" };
+      if (sync.state === "sending" || sync.state === "idle") return { text: "Zapisuji výsledek na web…", cls: "" };
+    }
+  }
+  if (a.loading && !a.fetchedAt) return { text: "Načítám program…", cls: "" };
+  if (a.nextLabel) return { text: `Na řadě: ${a.nextLabel}`, cls: "ok" };
+  if (a.program.length === 0) return { text: "Produkce dnes nemá v programu žádný zápas.", cls: "" };
+  return { text: "Program je dohraný — dnes už žádná hra.", cls: "ok" };
+}
+
+function renderAutopilot(s) {
+  const a = s.autopilot;
+  if (a) $("autoEnabled").checked = a.enabled;
+  const { text, cls } = autopilotText(s);
+  $("autoText").textContent = text;
+  $("autoText").className = "auto-text " + cls;
+  const list = $("autoProgram");
+  const program = (a && a.program) || [];
+  list.innerHTML = program.map((g) =>
+    `<div class="auto-game ${g.state}">` +
+    `<span class="auto-time">${esc(fmtTime(g.scheduledAt))}</span>` +
+    `<span class="auto-name">${esc(g.teamA)} vs ${esc(g.teamB)}${g.number ? ` · G${g.number}` : ""}${g.published ? "" : " · test"}</span>` +
+    `<span class="auto-state">${esc(g.winner ? `🏆 ${g.winner}` : PROGRAM_STATE[g.state] || g.state)}</span></div>`,
+  ).join("");
+  list.hidden = program.length === 0;
+  $("emptyText").textContent = a && a.enabled && a.production
+    ? "Autopilot připraví další hru z programu sám. Ruční hra jen pro zápas mimo program."
+    : "Založ hru ručně, nebo vyber produkci a zapni autopilota.";
+}
+
+const SYNC_TEXT = {
+  sending: () => "Zapisuji na web…",
+  ok: (sync) => `✓ Zapsáno na webu (revize ${sync.revision})${sync.unmatched ? ` · ${sync.unmatched} hráčů nespárováno` : ""}`,
+  error: (sync) => `Nezapsáno: ${sync.message || "chyba"}`,
+  rejected: (sync) => `Web odmítl: ${sync.message || ""}`,
+  idle: () => "",
+};
+
+function renderPrevious(s) {
+  const prev = s.previous;
+  const show = Boolean(prev && (!s.session || prev.meta.localGameId !== s.session.meta.localGameId));
+  $("prevGame").hidden = !show;
+  if (!show) return;
+  const m = prev.meta;
+  $("prevTitle").textContent = `${m.web ? m.web.label : `${m.team1} vs ${m.team2} · Game ${m.gameNumber}`}`;
+  const seg = $("prevWinner");
+  const key = `${m.localGameId}`;
+  if (seg.dataset.filled !== key) {
+    seg.innerHTML = "";
+    [m.team1, m.team2].forEach((name) => {
+      const b = document.createElement("button");
+      b.className = "seg-btn";
+      b.textContent = name;
+      b.dataset.team = name;
+      b.onclick = () => post("/api/game/winner", { winner: name, which: "previous" });
+      seg.appendChild(b);
+    });
+    seg.dataset.filled = key;
+  }
+  [...seg.children].forEach((b) => b.classList.toggle("active", b.dataset.team === prev.winner));
+  const sync = prev.webSync || { state: "idle" };
+  $("prevSync").textContent = (SYNC_TEXT[sync.state] || SYNC_TEXT.idle)(sync);
+  $("prevSync").className = "web-sync-text " + sync.state;
+  $("prevConfirm").hidden = !(prev.winner && prev.winnerSource === "auto");
+  $("prevResend").hidden = !(sync.state === "error" || sync.state === "rejected");
+}
+
+function renderDashProgram(s) {
+  const program = (s.autopilot && s.autopilot.program) || [];
+  const item = (g) => ({
+    title: `${fmtTime(g.scheduledAt)} · ${g.teamA} vs ${g.teamB}`,
+    sub: (g.number ? `Game ${g.number} · ` : "") + (g.winner ? `🏆 ${g.winner}` : PROGRAM_STATE[g.state] || g.state),
+    cls: g.state === "done" ? "ok" : g.state === "current" || g.state === "next" ? "hot" : "",
+  });
+  const noProgram = s.autopilot && s.autopilot.error ? s.autopilot.error
+    : s.autopilot && s.autopilot.production ? "Produkce dnes nemá v programu žádný zápas."
+    : "Vyber produkci v horní liště.";
+  fillDashList("dashScheduled", program.map(item), noProgram);
+  fillDashList(
+    "dashUpcoming",
+    program.filter((g) => ["current", "next", "upcoming", "pending"].includes(g.state)).map(item),
+    program.length ? "Dnes už nic nečeká." : noProgram,
+  );
+}
+
 const DRAGON_LABELS = {
   fire: "Infernal", earth: "Mountain", water: "Ocean", air: "Cloud",
   hextech: "Hextech", chemtech: "Chemtech", elder: "Elder",
@@ -382,10 +522,8 @@ function renderWinner(m, winner) {
       b.className = "seg-btn";
       b.textContent = name;
       b.dataset.team = name;
-      b.onclick = () => {
-        const v = currentWinner === name ? "" : name; // klik na aktivní = zrušit
-        post("/api/game/winner", { winner: v });
-      };
+      // Klik na už vybraný tým odhad potvrdí (na web se znovu neposílá).
+      b.onclick = () => post("/api/game/winner", { winner: name });
       seg.appendChild(b);
     });
     seg.dataset.filled = key;
@@ -505,6 +643,8 @@ function applyProduction(p) {
   if (!PRODUCTIONS[p]) return;
   production = p;
   localStorage.setItem("il_production", p);
+  // Agent podle produkce vybere token, načte program a zakládá hry.
+  post("/api/production", { production: p });
   document.body.dataset.prod = p;
   $("prodSwitch").textContent = PRODUCTIONS[p].label;
   // předvyplní pole Production v New Game
@@ -612,8 +752,8 @@ function fillDashList(id, items, emptyText) {
 $("dashDate").textContent = new Date().toLocaleDateString("cs-CZ", {
   weekday: "long", day: "numeric", month: "long", year: "numeric",
 });
-fillDashList("dashScheduled", [], "Rozpis se načte z webu (přijde později).");
-fillDashList("dashUpcoming", [], "Zatím nic — napojí se na rozpis z webu.");
+fillDashList("dashScheduled", [], "Načítám program…");
+fillDashList("dashUpcoming", [], "Načítám program…");
 refreshGames();
 
 connectWs();

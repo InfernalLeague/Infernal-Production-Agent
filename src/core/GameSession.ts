@@ -125,6 +125,18 @@ export class GameSession {
   /** Vítěz – v 1A ho zadá operátor (Live spectator ho spolehlivě nedá). */
   winner: string | null = null;
 
+  /**
+   * Od založení hry zmizela předchozí hra: Live API přestalo odpovídat nebo
+   * LeagueBroadcast přešel do OutOfGame. Pak už data patří nové hře, i když
+   * herní čas nestačí k rozlišení (viz `GameMeta.previousDuration`).
+   */
+  previousGameGone = false;
+
+  /** Opakování zápisu výsledku na web, když web neodpovídal. */
+  syncTimer: NodeJS.Timeout | null = null;
+  /** Během odesílání přišla změna vítěze — po dokončení se pošle znovu. */
+  syncAgain = false;
+
   constructor(meta: GameMeta, folder: string) {
     this.meta = meta;
     this.folder = folder;

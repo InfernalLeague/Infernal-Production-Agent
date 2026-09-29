@@ -535,3 +535,32 @@ body[data-prod="twitch"] .brand-logo, body[data-prod="kick"] .brand-logo { filte
 
 /* Popis pod nadpisem okna (nastavení, výběr produkce) nesmí lepit na pole. */
 .modal-card > .hint { margin-bottom: 14px; }
+
+/* --- Autopilot: hry podle programu produkce -------------------------------- */
+.auto-bar { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+.auto-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.auto-toggle { display: inline-flex; flex-direction: row; align-items: center; gap: 7px; cursor: pointer; font-family: var(--disp); letter-spacing: 0.04em; text-transform: uppercase; }
+.auto-toggle input { accent-color: var(--flame2); width: 16px; height: 16px; }
+.auto-text { flex: 1; min-width: 220px; font-size: 13px; color: var(--muted); }
+.auto-text.ok { color: var(--text); }
+.auto-text.live { color: var(--green); }
+.auto-text.warn { color: var(--amber); }
+.auto-text.err { color: var(--red); }
+.auto-program { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.auto-game { display: flex; flex-direction: column; gap: 1px; min-width: 150px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--inset); font-size: 12px; }
+.auto-game .auto-time { color: var(--faint); font-variant-numeric: tabular-nums; }
+.auto-game .auto-name { color: var(--text-strong); font-weight: 600; white-space: nowrap; }
+.auto-game .auto-state { color: var(--muted); }
+.auto-game.done { opacity: 0.6; }
+.auto-game.done .auto-state { color: var(--green); }
+.auto-game.current { border-color: var(--flame2); box-shadow: 0 0 0 1px var(--flame2) inset; }
+.auto-game.current .auto-state { color: var(--ember-text); }
+.auto-game.next { border-color: var(--border-accent); }
+.auto-game.annulled, .auto-game.admin { opacity: 0.45; }
+
+.prev-game { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--border-accent); border-radius: var(--radius-sm); padding: 10px 14px; }
+.prev-title { font-family: var(--disp); font-weight: 700; letter-spacing: 0.02em; }
+.prev-game .web-sync-text { flex: 1; min-width: 180px; }
+
+.winner-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dash-item.hot { border-left-color: var(--flame2); }

@@ -1,5 +1,5 @@
 import type { ConfirmedGame } from "../types.js";
-import { loadWebSettings } from "./settings.js";
+import { loadWebSettings, tokenFor, type ProductionKey } from "./settings.js";
 
 /**
  * Klient API webu Infernal League pro Production Agenta.
@@ -68,16 +68,22 @@ export class WebApiError extends Error {
 
 const TIMEOUT_MS = 15_000;
 
-async function request<T>(method: "GET" | "POST", pathname: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: "GET" | "POST",
+  pathname: string,
+  body?: unknown,
+  production?: ProductionKey | null,
+): Promise<T> {
   const settings = loadWebSettings();
-  if (!settings.token) throw new WebApiError("Chybí token produkce — nastav ho v Nastavení.", false);
+  const token = tokenFor(production ?? undefined);
+  if (!token) throw new WebApiError("Chybí token produkce — nastav ho v ⚙ Web.", false);
 
   let response: Response;
   try {
     response = await fetch(`${settings.webUrl}${pathname}`, {
       method,
       headers: {
-        Authorization: `Bearer ${settings.token}`,
+        Authorization: `Bearer ${token}`,
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -95,9 +101,10 @@ async function request<T>(method: "GET" | "POST", pathname: string, body?: unkno
   return data;
 }
 
-export function fetchSchedule(date?: string): Promise<WebSchedule> {
+/** Program produkce v daný den. Bez produkce se použije token aktivní produkce. */
+export function fetchSchedule(date?: string, production?: ProductionKey | null): Promise<WebSchedule> {
   const query = date ? `?date=${encodeURIComponent(date)}` : "";
-  return request<WebSchedule>("GET", `/api/agent/schedule${query}`);
+  return request<WebSchedule>("GET", `/api/agent/schedule${query}`, undefined, production);
 }
 
 /**
@@ -105,18 +112,30 @@ export function fetchSchedule(date?: string): Promise<WebSchedule> {
  * Posílá se každých pár sekund; nepovedený pokus se neopakuje, další stav
  * přijde za chvíli sám.
  */
-export async function submitLive(gameId: string, confirmed: ConfirmedGame, gameTime: number): Promise<void> {
-  await request<{ ok: true }>("POST", `/api/agent/games/${encodeURIComponent(gameId)}/live`, {
-    confirmed,
-    gameTime,
-  });
+export async function submitLive(
+  gameId: string,
+  confirmed: ConfirmedGame,
+  gameTime: number,
+  production?: ProductionKey | null,
+): Promise<void> {
+  await request<{ ok: true }>(
+    "POST",
+    `/api/agent/games/${encodeURIComponent(gameId)}/live`,
+    { confirmed, gameTime },
+    production,
+  );
 }
 
-export async function submitResult(gameId: string, confirmed: ConfirmedGame): Promise<SubmitResultResponse> {
+export async function submitResult(
+  gameId: string,
+  confirmed: ConfirmedGame,
+  production?: ProductionKey | null,
+): Promise<SubmitResultResponse> {
   const data = await request<{ ok: true; result: SubmitResultResponse }>(
     "POST",
     `/api/agent/games/${encodeURIComponent(gameId)}/result`,
     { confirmed },
+    production,
   );
   return data.result;
 }

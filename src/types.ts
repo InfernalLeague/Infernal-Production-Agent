@@ -50,6 +50,11 @@ export interface WebGameLink {
   matchId: string;
   /** Čitelný popis pro dashboard, např. „Ixtal vs Freljord · Game 2“. */
   label: string;
+  /**
+   * Produkce, jejímž tokenem se výsledek posílá. Drží se u hry, aby přepnutí
+   * produkce v dashboardu uprostřed hry neposlalo výsledek cizím tokenem.
+   */
+  production?: "twitch" | "kick";
 }
 
 /** Stav odeslání výsledku na web. */
@@ -72,6 +77,14 @@ export interface CreateGameInput {
   team1Side?: Side;
   /** Hra na webu vybraná z programu produkce; bez ní se výsledek na web neposílá. */
   web?: WebGameLink | null;
+  /** Hru založil autopilot podle programu produkce (ne operátor v New Game). */
+  auto?: boolean;
+  /**
+   * Délka předchozí hry v sekundách. Klient po konci hry zůstává na
+   * výsledkové obrazovce a Live API dál vrací starou hru; nová hra se
+   * pozná podle herního času pod touto hodnotou (nebo po výpadku API).
+   */
+  previousDuration?: number | null;
 }
 
 /** Interní identifikace hry (workflow §6). NEpoužíváme League Game ID. */
@@ -86,6 +99,8 @@ export interface GameMeta {
   createdAt: string;         // ISO
   status: GameStatus;
   web?: WebGameLink | null;
+  auto?: boolean;
+  previousDuration?: number | null;
 }
 
 /**

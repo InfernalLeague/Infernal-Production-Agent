@@ -77,6 +77,23 @@ zůstávají v repu.
 
 ## Postup v UI
 
+### Autopilot (výchozí)
+
+1. V **⚙ Web** vlož tokeny produkcí (Twitch, Kick) z adminu webu.
+2. Po startu vyber produkci. Agent tokenem té produkce načte dnešní program
+   (každých 15 s znovu) a první hru bez výsledku připraví sám (`WAITING FOR GAME`).
+3. Start hry pozná sám. Hru s daty předchozí hry, která ještě visí
+   na výsledkové obrazovce, nepřevezme.
+4. Po konci hry vítěze odhadne a výsledek zapíše na web. Web založí další hru
+   série a Agent na ni hned přejde. Po konci série přejde na další zápas programu.
+5. Produkce jen kontroluje vítěze: **Potvrdit** odhad, nebo přepnout na druhý tým.
+   Vítěze **předchozí hry** jde opravit i poté, co Agent čeká na další.
+   Bez odhadu (surrender) Agent čeká, až vítěze zvolí produkce.
+
+Hru založenou ručně autopilot nepřepíše. Převezme to až po jejím konci.
+
+### Ruční hra
+
 1. Vyplň **New Game** (Team 1/2, číslo hry, série, strana) → **CREATE GAME**.
 2. Stav přejde na `WAITING FOR GAME`. Jakmile LeagueBroadcast nebo Live API začne
    odpovídat → `LIVE`
