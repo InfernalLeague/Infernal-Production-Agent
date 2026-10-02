@@ -82,11 +82,15 @@ function mkXp(current: number, nextLevel: number) {
 // bestOf: 1 = Bo1 regular season (record shows totalScore e.g. 5-2)
 // bestOf: 3 = Bo3 playoff series  (record shows seriesScore e.g. 1-0)
 // bestOf: 5 = Bo5 playoff grand finals
+// Názvy týmů a formát jdou v mocku přepsat adresou
+// (?mock&blue=HELLFIRE&red=OBSIDIAN&bo=1), ať jde zkoušet nejdelší názvy.
+const MOCK_PARAMS = new URLSearchParams(location.search)
+
 const MOCK_SCOREBOARD = {
-  bestOf: 5, // ← 1 = regular season (totalScore text), 3 = Bo3 circles, 5 = Bo5 circles
+  bestOf: Number(MOCK_PARAMS.get('bo') ?? 5), // ← 1 = regular season (totalScore text), 3 = Bo3 circles, 5 = Bo5 circles
   teams: [
     {
-      teamName: 'Gen.G', teamTag: 'GEN',
+      teamName: MOCK_PARAMS.get('blue') ?? 'Gen.G', teamTag: 'GEN',
       // teamIconUrl: cache-relative path used in real games; use http URL here so
       // getCacheUrl passes it through unchanged in the mock.
       teamIconUrl: ch('Garen'), // dev placeholder — real game uses BlueBottle cache path
@@ -98,7 +102,7 @@ const MOCK_SCOREBOARD = {
       dragonPowerPlay: { gold: 2400, kills: 2, deaths: 0, timeStart: GT - 60, timeEnd: GT + 90 },
     },
     {
-      teamName: 'T1', teamTag: 'T1',
+      teamName: MOCK_PARAMS.get('red') ?? 'T1', teamTag: 'T1',
       teamIconUrl: ch('Zed'), // dev placeholder — Faker's iconic champion
       seriesScore: { wins: 1, losses: 2 }, totalScore: { wins: 3, losses: 4 },
       kills: 5, towers: 1, gold: 38200, totalGold: 38200,

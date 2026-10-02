@@ -22,7 +22,7 @@ const gameTime   = useIngameSelector((s) => s.gameData?.gameTime ?? 0, 0)
 // který je užší → nezmenšíme font a po pozdějším swapu na Rajdhani text přeteče.
 // Řešení: po každém volání znovu ověřit po `document.fonts.ready`.
 function fitTeamName(el: HTMLElement, opts?: { min?: number; max?: number }): void {
-  const min = opts?.min ?? 18
+  const min = opts?.min ?? 24
   const max = opts?.max ?? 34
   const shrink = (): void => {
     el.style.fontSize = max + 'px'
@@ -640,10 +640,12 @@ function fmtDiff(diff: number): string {
   display: flex;
   align-items: center;
   align-self: center;
-  gap: 7px;
+  gap: 8px;
   flex-shrink: 0;
   overflow: hidden;
-  max-width: 230px;
+  /* Pevná šířka, ne max-width: blok identity je stejně široký pro „T1"
+     i pro osmiznakový název, takže věže a gold vedle něj nikdy neposkočí. */
+  width: 230px;
 }
 /* Right team: [name] [logo] — logo stays at far-right edge, no reversal needed */
 .team__id--r { flex-direction: row; }
@@ -652,6 +654,10 @@ function fmtDiff(diff: number): string {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  /* Zbytek bloku identity po logu (230 − 42 − 8) — název má vlastní pevné
+     místo a do sousedních statistik nezasahuje. */
+  width: 180px;
+  flex-shrink: 0;
 }
 .team__meta--r { align-items: flex-end; }
 
@@ -717,14 +723,15 @@ function fmtDiff(diff: number): string {
   color: rgba(255, 255, 255, 0.95);
   line-height: 1;
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.95);
-  /* Pevný rozpočet šířky — team__id má max-width 230, badge zabere 42+7,
-     zbývá 181 px na jméno. Při dlouhých jménech direktiva v-fit-name
-     zmenší font-size, aby se text vešel do těch 181 px. */
-  display: inline-block;
-  max-width: 181px;
+  /* Název má nejvýš 8 znaků. Celé místo je 180 px; běžné názvy se vejdou
+     v plné velikosti, široké (např. samá W nebo M) direktiva v-fit-name
+     zmenší nejvýš na 24 px, což se na streamu pořád dobře čte. */
+  display: block;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
 }
+.team__meta--r .team__name { text-align: right; }
 .team__record {
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
