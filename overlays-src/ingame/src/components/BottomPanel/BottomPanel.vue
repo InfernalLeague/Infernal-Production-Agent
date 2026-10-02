@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from 'vue'
 import { useClient } from '@/client'
 import { useIngameSelector, useTabPlayers } from '@/composables/useIngame'
-import { useLiveConfig } from '@/composables/useLiveConfig'
+import { nickFor, useMatchContext } from '@/composables/useMatchContext'
 import { getSortedInventory, getTrinket, getRoleQuest } from '@bluebottle_gg/league-broadcast-client'
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -143,10 +143,10 @@ const tabPlayers = useTabPlayers()
 // overlay is active. Used as primary source for health; REST as fallback for rest.
 const wsTabs = useIngameSelector((s) => (s.gameData as any)?.tabs ?? null, null)
 
-// ── Live-game config (Supabase) ─────────────────────────────────────────────
-// Operator-configured player names per side, in role order (TOP→SUPPORT).
-// These REPLACE the BlueBottle names; live stats are mapped by side + slot index.
-const { blue: liveBlue, red: liveRed } = useLiveConfig()
+// ── Hráči z webu (Production Agent → /api/overlay) ─────────────────────────
+// Přezdívky ze sestavy zápasu nahrazují jména z klienta hry. Párují se podle
+// šampiona z Champion Draftu, jinak podle pořadí rolí (viz nickFor).
+const match = useMatchContext()
 
 // ── Team-level baron/elder ─────────────────────────────────────────────────
 // BlueBottle REST never reliably returns tabPlayer.hasBaron/hasElder for custom overlays.
@@ -404,7 +404,7 @@ function normPlayer(sbPlayer: any, tabPlayer: any, wsTabPlayer: any, gt: number,
     role,
     champion,
     // Name priority:
-    //  1. Operator-configured live-game name for this side+slot — authoritative
+    //  1. Přezdívka ze sestavy zápasu z webu (nickFor) — rozhoduje
     //  2. Player's real first name from BlueBottle team data (fallback)
     //  3. Raw in-game summoner name as a last resort (e.g. DevMock / unset config)
     summonerName: configName || tabPlayer?.givenName?.trim() || sbPlayer.displayName || sbPlayer.name || '',
@@ -500,14 +500,17 @@ const bluePlayers = computed(() => {
   const tElder    = blueHasElder.value
   const tBaronEnd = ((scoreboard.value as any)?.teams?.[0]?.baronPowerPlay?.timeEnd  ?? 0) as number
   const tElderEnd = ((scoreboard.value as any)?.teams?.[0]?.dragonPowerPlay?.timeEnd ?? 0) as number
-  const cfg = liveBlue.value
-  return (sbTeam?.players ?? []).map((p: any, i: number) =>
-    normPlayer(
+  const roster = match.value?.players.blue
+  return (sbTeam?.players ?? []).map((p: any, i: number) => {
+    const tab = findTabPlayer(tabAll, p)
+    return normPlayer(
       p,
-      findTabPlayer(tabAll, p),
+      tab,
       wsAll.length ? findTabPlayer(wsAll, p) : null,
-      gt, i, tBaron, tElder, tBaronEnd, tElderEnd, cfg[i]?.name ?? '',
-    ),
+      gt, i, tBaron, tElder, tBaronEnd, tElderEnd,
+      nickFor(roster, i, p.champion?.alias ?? tab?.championAssets?.alias),
+    )
+  },
   ).filter(Boolean)
 })
 
@@ -520,14 +523,17 @@ const redPlayers = computed(() => {
   const tElder    = redHasElder.value
   const tBaronEnd = ((scoreboard.value as any)?.teams?.[1]?.baronPowerPlay?.timeEnd  ?? 0) as number
   const tElderEnd = ((scoreboard.value as any)?.teams?.[1]?.dragonPowerPlay?.timeEnd ?? 0) as number
-  const cfg = liveRed.value
-  return (sbTeam?.players ?? []).map((p: any, i: number) =>
-    normPlayer(
+  const roster = match.value?.players.red
+  return (sbTeam?.players ?? []).map((p: any, i: number) => {
+    const tab = findTabPlayer(tabAll, p)
+    return normPlayer(
       p,
-      findTabPlayer(tabAll, p),
+      tab,
       wsAll.length ? findTabPlayer(wsAll, p) : null,
-      gt, i, tBaron, tElder, tBaronEnd, tElderEnd, cfg[i]?.name ?? '',
-    ),
+      gt, i, tBaron, tElder, tBaronEnd, tElderEnd,
+      nickFor(roster, i, p.champion?.alias ?? tab?.championAssets?.alias),
+    )
+  },
   ).filter(Boolean)
 })
 
@@ -638,7 +644,7 @@ function tpCd(sec: number): string {
 </script>
 
 <template>
-  <Transition name="bpanel">
+  <Transition name="strip">
     <div v-if="hasPlayers" class="bpanel">
       <div class="bpanel__topline" />
 
@@ -1014,22 +1020,17 @@ function tpCd(sec: number): string {
   bottom: 0;
   left: 305px;
   right: 305px;
-  background: rgba(9, 5, 2, 0.94);
-  border-top: 1px solid rgba(249, 115, 22, 0.14);
-  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(249, 115, 22, 0.06);
+  background: var(--il-surface);
+  border-top: 1px solid var(--il-line);
+  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.40);
+  /* Spodní pruh vyjíždí zleva doprava: L-Frame, hráči, panel u minimapy. */
+  --strip-delay: 60ms;
 }
 
+/* Linku nahoře nese border-top stejný jako u sousedních panelů; tenhle
+   pruh drží jen výšku, aby spodní pruh lícoval s L-Framem (221 px). */
 .bpanel__topline {
   height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(120, 50, 8, 0.5) 6%,
-    rgba(249, 115, 22, 0.75) 18%,
-    rgba(249, 115, 22, 0.75) 82%,
-    rgba(120, 50, 8, 0.5) 94%,
-    transparent 100%
-  );
 }
 
 .bpanel__body {
@@ -1633,8 +1634,4 @@ function tpCd(sec: number): string {
 .lvlup-r-enter-from   { transform: translateX(-100%); opacity: 0; }
 .lvlup-r-leave-to     { transform: translateX(-100%); opacity: 0; }
 
-/* ── Panel enter/leave ───────────────────────────────────────────── */
-.bpanel-enter-active { transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease; }
-.bpanel-leave-active { transition: transform 0.5s cubic-bezier(0.55, 0, 1, 0.45), opacity 0.3s ease; }
-.bpanel-enter-from, .bpanel-leave-to { transform: translateY(100%); opacity: 0; }
 </style>

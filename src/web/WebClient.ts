@@ -108,6 +108,15 @@ export function fetchSchedule(date?: string, production?: ProductionKey | null):
 }
 
 /**
+ * Data pro ingame overlay: týmy podle stran, hráči se šampiony z Champion
+ * Draftu, fáze splitu, další zápas a obrázky do L-Framu. Tvar určuje web
+ * (`OverlayContext` v lib/agent/overlay.ts), agent ho jen předává dál.
+ */
+export function fetchOverlay(gameId: string, production?: ProductionKey | null): Promise<unknown> {
+  return request<unknown>("GET", `/api/agent/games/${encodeURIComponent(gameId)}/overlay`, undefined, production);
+}
+
+/**
  * Živý stav běžící hry: stejný tvar jako výsledek (bez vítěze) a herní čas.
  * Posílá se každých pár sekund; nepovedený pokus se neopakuje, další stav
  * přijde za chvíli sám.

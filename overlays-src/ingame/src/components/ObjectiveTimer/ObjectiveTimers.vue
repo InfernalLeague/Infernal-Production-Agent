@@ -214,7 +214,7 @@ function fmt(remaining: number): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(9, 5, 2, 0.88);
+  background: var(--il-surface-glass);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
   padding: 4px 12px 4px 6px;

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useClient } from '@/client'
 import { useIngameSelector } from '@/composables/useIngame'
-import { useLiveConfig } from '@/composables/useLiveConfig'
+import { useMatchContext } from '@/composables/useMatchContext'
 
 const client = useClient()
 // Convert a BlueBottle cache-relative path to a full http://localhost:58869/cache/… URL.
@@ -47,20 +47,30 @@ const vFitName = {
 const blue = computed(() => scoreboard.value?.teams?.[0] ?? null)
 const red  = computed(() => scoreboard.value?.teams?.[1] ?? null)
 
-// BestOf1 = regular season → show totalScore text e.g. "5–2"
-// BestOf3/5 = playoff series → show win-dot circles (2 or 3 per team)
-const bestOf     = computed(() => scoreboard.value?.bestOf ?? 1)
+// Týmy, bilance a skóre série z webu (Production Agent → /api/overlay).
+// Bez napojené hry se overlay vrátí k tomu, co hlásí LeagueBroadcast.
+const match = useMatchContext()
+const blueInfo = computed(() => match.value?.blue ?? null)
+const redInfo  = computed(() => match.value?.red ?? null)
+
+const blueName = computed(() => blueInfo.value?.name ?? blue.value?.teamName ?? 'TEAM A')
+const redName  = computed(() => redInfo.value?.name ?? red.value?.teamName ?? 'TEAM B')
+const blueLogo = computed(() => blueInfo.value ? blueInfo.value.logoUrl ?? '' : resolveUrl(blue.value?.teamIconUrl))
+const redLogo  = computed(() => redInfo.value ? redInfo.value.logoUrl ?? '' : resolveUrl(red.value?.teamIconUrl))
+const blueTag  = computed(() => blueInfo.value?.tag ?? blue.value?.teamTag ?? 'A')
+const redTag   = computed(() => redInfo.value?.tag ?? red.value?.teamTag ?? 'B')
+
+// BO1 (základní část) → bilance „5–2"; BO3/BO5 (play-off) → tečky výher série.
+const bestOf     = computed(() => match.value?.bestOf ?? scoreboard.value?.bestOf ?? 1)
 const isPlayoff  = computed(() => (bestOf.value as number) > 1)
 // Number of wins needed (= circles shown): ceil(bestOf/2)  → Bo3=2, Bo5=3
 const winsNeeded = computed(() => Math.ceil((bestOf.value as number) / 2))
 
-// Bo1 (regular season) W-L text is driven by Supabase via live_config: the
-// operator sets the two team_ids per broadcast on the admin "Live game" page
-// and matches are counted from public.matches. BlueBottle's totalScore isn't
-// used here because it needs manual per-broadcast setup.
-// Bo3/Bo5 series dots keep reading BlueBottle's seriesScore inline — series
-// state is per-draft and the DB has no concept of "current series".
-const { blueRecord: liveBlueRecord, redRecord: liveRedRecord } = useLiveConfig()
+const blueRecord = computed(() => blueInfo.value?.record ?? blue.value?.totalScore ?? { wins: 0, losses: 0 })
+const redRecord  = computed(() => redInfo.value?.record ?? red.value?.totalScore ?? { wins: 0, losses: 0 })
+// Výhry v sérii: z potvrzených her na webu (agent je potvrzuje sám po hře).
+const blueSeriesWins = computed(() => blueInfo.value?.seriesWins ?? blue.value?.seriesScore?.wins ?? 0)
+const redSeriesWins  = computed(() => redInfo.value?.seriesWins ?? red.value?.seriesScore?.wins ?? 0)
 
 // Real BlueBottle uses 'gold'; dev mock also provides 'totalGold' for compat.
 function teamGold(team: any): number {
@@ -245,25 +255,20 @@ function fmtDiff(diff: number): string {
               <div class="badge badge--y">
                 <div class="badge__ring" />
                 <!-- Show team logo from BlueBottle cache; fall back to tag initial -->
-                <img
-                  v-if="resolveUrl(blue?.teamIconUrl)"
-                  :src="resolveUrl(blue?.teamIconUrl)"
-                  class="badge__logo"
-                  :alt="blue?.teamTag"
-                />
-                <span v-else class="badge__letter">{{ (blue?.teamTag ?? 'A')[0]?.toUpperCase() }}</span>
+                <img v-if="blueLogo" :src="blueLogo" class="badge__logo" :alt="blueTag" />
+                <span v-else class="badge__letter">{{ blueTag[0]?.toUpperCase() }}</span>
               </div>
               <div class="team__meta">
-                <span v-fit-name class="team__name">{{ blue?.teamName ?? 'TEAM A' }}</span>
+                <span v-fit-name class="team__name">{{ blueName }}</span>
                 <!-- Bo1: text standings | Bo3/Bo5: win-dot circles -->
                 <span v-if="!isPlayoff" class="team__record">
-                  {{ liveBlueRecord.wins }}–{{ liveBlueRecord.losses }}
+                  {{ blueRecord.wins }}–{{ blueRecord.losses }}
                 </span>
                 <div v-else class="team__wins">
                   <span
                     v-for="n in winsNeeded" :key="n"
                     class="win-dot win-dot--y"
-                    :class="{ 'win-dot--on': n <= (blue?.seriesScore?.wins ?? 0) }"
+                    :class="{ 'win-dot--on': n <= blueSeriesWins }"
                   />
                 </div>
               </div>
@@ -313,27 +318,22 @@ function fmtDiff(diff: number): string {
             <!-- Identity: name toward center, logo on far right edge -->
             <div class="team__id team__id--r">
               <div class="team__meta team__meta--r">
-                <span v-fit-name class="team__name">{{ red?.teamName ?? 'TEAM B' }}</span>
+                <span v-fit-name class="team__name">{{ redName }}</span>
                 <span v-if="!isPlayoff" class="team__record">
-                  {{ liveRedRecord.wins }}–{{ liveRedRecord.losses }}
+                  {{ redRecord.wins }}–{{ redRecord.losses }}
                 </span>
                 <div v-else class="team__wins">
                   <span
                     v-for="n in winsNeeded" :key="n"
                     class="win-dot win-dot--r"
-                    :class="{ 'win-dot--on': n <= (red?.seriesScore?.wins ?? 0) }"
+                    :class="{ 'win-dot--on': n <= redSeriesWins }"
                   />
                 </div>
               </div>
               <div class="badge badge--r">
                 <div class="badge__ring" />
-                <img
-                  v-if="resolveUrl(red?.teamIconUrl)"
-                  :src="resolveUrl(red?.teamIconUrl)"
-                  class="badge__logo"
-                  :alt="red?.teamTag"
-                />
-                <span v-else class="badge__letter">{{ (red?.teamTag ?? 'B')[0]?.toUpperCase() }}</span>
+                <img v-if="redLogo" :src="redLogo" class="badge__logo" :alt="redTag" />
+                <span v-else class="badge__letter">{{ redTag[0]?.toUpperCase() }}</span>
               </div>
             </div>
 
@@ -559,13 +559,13 @@ function fmtDiff(diff: number): string {
   z-index: 10;
   width: 1100px;
   margin: 3px auto 0;
-  background: rgba(9, 5, 2, 0.60);
+  background: var(--il-surface-glass);
   clip-path: polygon(
     10px 0%, calc(100% - 10px) 0%,
     100% 10px, 100% 100%,
     0% 100%, 0% 10px
   );
-  border: 1px solid rgba(249, 115, 22, 0.08);
+  border: 1px solid var(--il-divider);
   filter: drop-shadow(0 6px 28px rgba(0, 0, 0, 0.70));
 }
 
@@ -906,7 +906,7 @@ function fmtDiff(diff: number): string {
   padding: 0 10px;
   gap: 6px;
   overflow: hidden;
-  background: rgba(9, 5, 2, 0.60);
+  background: var(--il-surface-glass);
   border-top: 1px solid rgba(249, 115, 22, 0.06);
 }
 .obj-team--y { border-left: 2px solid rgba(251, 191, 36, 0.40); }
@@ -1090,12 +1090,12 @@ function fmtDiff(diff: number): string {
 }
 
 /* ── Transitions ─────────────────────────────────── */
-.bp-y-enter-active { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; }
-.bp-y-leave-active { transition: transform 0.35s ease, opacity 0.25s ease; }
+.bp-y-enter-active { transition: transform var(--il-in) var(--il-ease-out), opacity var(--il-in) ease; }
+.bp-y-leave-active { transition: transform var(--il-out) var(--il-ease-in), opacity var(--il-out) ease; }
 .bp-y-enter-from, .bp-y-leave-to { transform: translateX(-115%); opacity: 0; }
 
-.bp-r-enter-active { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; }
-.bp-r-leave-active { transition: transform 0.35s ease, opacity 0.25s ease; }
+.bp-r-enter-active { transition: transform var(--il-in) var(--il-ease-out), opacity var(--il-in) ease; }
+.bp-r-leave-active { transition: transform var(--il-out) var(--il-ease-in), opacity var(--il-out) ease; }
 .bp-r-enter-from, .bp-r-leave-to { transform: translateX(115%); opacity: 0; }
 
 /* ─── ELDER BUFF MODULE ──────────────────────────────────────────── */
@@ -1171,12 +1171,12 @@ function fmtDiff(diff: number): string {
   letter-spacing: 0.06em;
 }
 
-.ep-y-enter-active { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; }
-.ep-y-leave-active { transition: transform 0.35s ease, opacity 0.25s ease; }
+.ep-y-enter-active { transition: transform var(--il-in) var(--il-ease-out), opacity var(--il-in) ease; }
+.ep-y-leave-active { transition: transform var(--il-out) var(--il-ease-in), opacity var(--il-out) ease; }
 .ep-y-enter-from, .ep-y-leave-to { transform: translateX(-115%); opacity: 0; }
 
-.ep-r-enter-active { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; }
-.ep-r-leave-active { transition: transform 0.35s ease, opacity 0.25s ease; }
+.ep-r-enter-active { transition: transform var(--il-in) var(--il-ease-out), opacity var(--il-in) ease; }
+.ep-r-leave-active { transition: transform var(--il-out) var(--il-ease-in), opacity var(--il-out) ease; }
 .ep-r-enter-from, .ep-r-leave-to { transform: translateX(115%); opacity: 0; }
 
 /* ─── ROLE QUEST ROW ────────────────────────────────────────────── */
@@ -1242,7 +1242,9 @@ function fmtDiff(diff: number): string {
 .rq-move       { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* ─── SCOREBOARD TRANSITION ─────────────────────────────────────── */
-.sb-enter-active { transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease; }
-.sb-leave-active { transition: transform 0.75s cubic-bezier(0.55, 0, 1, 0.45), opacity 0.3s ease; }
+/* Horní panel sjede shora; delší než ostatní panely, je to první věc,
+   kterou divák po načtení hry uvidí. */
+.sb-enter-active { transition: transform calc(var(--il-in) * 1.4) var(--il-ease-out), opacity var(--il-in) ease; }
+.sb-leave-active { transition: transform calc(var(--il-out) * 1.6) var(--il-ease-in), opacity var(--il-out) ease; }
 .sb-enter-from, .sb-leave-to { transform: translateY(-120%); opacity: 0; }
 </style>

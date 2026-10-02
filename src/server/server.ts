@@ -8,7 +8,7 @@ import { log } from "../util/logger.js";
 import type { GameManager } from "../core/GameManager.js";
 import type { Autopilot } from "../core/Autopilot.js";
 import type { CreateGameInput, WebGameLink } from "../types.js";
-import { fetchSchedule } from "../web/WebClient.js";
+import { fetchOverlay, fetchSchedule } from "../web/WebClient.js";
 import { getActiveProduction, productionKeyOf, publicWebSettings, saveWebSettings } from "../web/settings.js";
 
 /**
@@ -28,6 +28,13 @@ export function startServer(manager: GameManager, autopilot: Autopilot): void {
   mountOverlay(app, "ingame");
 
   app.get("/api/state", (_req, res) => res.json(manager.getState()));
+
+  // Data zápasu pro ingame overlay (týmy, hráči, fáze, obrázky L-Framu).
+  // Overlay je na stejném serveru, takže se ptá sem a ne přímo webu —
+  // token produkce zůstává v agentovi a OBS nemá žádný klíč.
+  app.get("/api/overlay", async (_req, res) => {
+    res.json(await overlayContext(manager));
+  });
 
   // Meta o aplikaci (verze pro roh dashboardu, mock flag).
   app.get("/api/meta", (_req, res) => res.json({ version: config.version, mock: config.mock }));
@@ -201,6 +208,37 @@ function listGames(): GameListItem[] {
   // nejnovější první (podle názvu složky = datum + pořadí)
   out.sort((a, b) => b.folder.localeCompare(a.folder));
   return out;
+}
+
+/**
+ * Data pro overlay aktuální hry, s krátkou pamětí.
+ *
+ * Overlay se ptá každých pár sekund; web stačí oslovit jednou za
+ * `OVERLAY_TTL_MS`. Když web zrovna neodpovídá, vrátí se poslední známá
+ * data té hry — overlay uprostřed hry nemá přijít o názvy týmů kvůli
+ * výpadku sítě. Bez hry napojené na web je odpověď `{ context: null }`
+ * a overlay jede jen z LeagueBroadcastu jako dřív.
+ */
+const OVERLAY_TTL_MS = 5_000;
+let overlayCache: { gameId: string; at: number; context: unknown } | null = null;
+
+async function overlayContext(manager: GameManager): Promise<{ context: unknown; stale?: boolean }> {
+  const web = manager.currentSession()?.meta.web;
+  if (!web) return { context: null };
+
+  if (overlayCache?.gameId === web.gameId && Date.now() - overlayCache.at < OVERLAY_TTL_MS) {
+    return { context: overlayCache.context };
+  }
+
+  try {
+    const context = await fetchOverlay(web.gameId, web.production ?? null);
+    overlayCache = { gameId: web.gameId, at: Date.now(), context };
+    return { context };
+  } catch (error) {
+    log.warn(`Data pro overlay se nepodařilo načíst: ${error instanceof Error ? error.message : String(error)}`);
+    if (overlayCache?.gameId === web.gameId) return { context: overlayCache.context, stale: true };
+    return { context: null };
+  }
 }
 
 /**

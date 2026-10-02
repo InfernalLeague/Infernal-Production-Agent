@@ -153,7 +153,7 @@ function fmtReaction(s: number): string {
   z-index: 30;
   min-width: 380px;
   max-width: 520px;
-  background: rgba(9, 5, 2, 0.94);
+  background: var(--il-surface);
   border: 1px solid rgba(249, 115, 22, 0.28);
   border-radius: 4px;
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.75),

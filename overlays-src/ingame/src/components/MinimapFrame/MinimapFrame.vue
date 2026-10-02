@@ -5,7 +5,7 @@ const isInGame = useIsInGame()
 </script>
 
 <template>
-  <Transition name="mf">
+  <Transition name="strip">
     <div v-if="isInGame" class="mframe" />
   </Transition>
 </template>
@@ -26,6 +26,7 @@ const isInGame = useIsInGame()
    * --bw controls border width.
    */
   --bw: 10px;
+  --strip-delay: 180ms;
   padding: var(--bw);
 
   background: linear-gradient(
@@ -47,8 +48,4 @@ const isInGame = useIsInGame()
   mask-composite: exclude;
 }
 
-.mf-enter-active { transition: opacity 0.4s ease; }
-.mf-leave-active { transition: opacity 0.3s ease; }
-.mf-enter-from,
-.mf-leave-to     { opacity: 0; }
 </style>

@@ -22,3 +22,59 @@ body {
   position: relative;
   overflow: hidden;
 }
+
+/* ── Společné barvy a pohyb ──────────────────────────────────────────
+   Jedna sada pro všechny panely, aby k sobě opticky patřily. Dřív měl
+   každý panel vlastní odstín oranžové a jinou průhlednost pozadí
+   (60 %, 88 %, 94 %, plná). Strana týmů zůstává: modrá strana žlutá,
+   červená červená, jako ve hře a v Champion Draftu. */
+:root {
+  /* Spodní pruh (L-Frame, hráči, panel u minimapy, minimapa) — plný. */
+  --il-surface: #0a0603;
+  /* Horní panel a objektivy — přes hru, takže lehce průhledné. */
+  --il-surface-glass: rgba(10, 6, 3, 0.78);
+  --il-line: rgba(249, 115, 22, 0.22);
+  --il-divider: rgba(255, 255, 255, 0.06);
+
+  --il-ember: #f97316;
+  --il-ember-glow: rgba(249, 115, 22, 0.16);
+  --il-blue-side: #fbbf24;
+  --il-red-side: #ef4444;
+
+  --il-text: rgba(255, 255, 255, 0.95);
+  --il-text-dim: rgba(255, 255, 255, 0.62);
+
+  /* Nástup panelů: rychlý start, měkké dojetí. Odchod: zrychlení ven. */
+  --il-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --il-ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --il-in: 600ms;
+  --il-out: 320ms;
+  /* Výměna obsahu uvnitř panelu (slideshow, střídání pohledů). */
+  --il-swap: 420ms;
+}
+
+/* Spodní pruh vyjíždí zespodu, panely jeden po druhém zleva doprava
+   (zpoždění si každý nastaví přes --strip-delay). */
+.strip-enter-active {
+  transition: transform var(--il-in) var(--il-ease-out) var(--strip-delay, 0ms),
+              opacity var(--il-in) ease var(--strip-delay, 0ms);
+}
+.strip-leave-active {
+  transition: transform var(--il-out) var(--il-ease-in), opacity var(--il-out) ease;
+}
+.strip-enter-from,
+.strip-leave-to {
+  transform: translateY(32px);
+  opacity: 0;
+}
+
+/* Výměna obsahu: starý odjede nahoru a zmizí, nový přijede zespodu. */
+.swap-enter-active {
+  transition: transform var(--il-swap) var(--il-ease-out), opacity var(--il-swap) ease;
+}
+.swap-leave-active {
+  transition: transform calc(var(--il-swap) * 0.6) var(--il-ease-in),
+              opacity calc(var(--il-swap) * 0.6) ease;
+}
+.swap-enter-from { transform: translateY(10px); opacity: 0; }
+.swap-leave-to   { transform: translateY(-10px); opacity: 0; }

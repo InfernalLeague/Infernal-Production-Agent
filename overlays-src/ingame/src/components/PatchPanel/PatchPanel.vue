@@ -2,17 +2,30 @@
 import { computed, watch } from 'vue'
 import { useIsInGame, useIngameSelector } from '@/composables/useIngame'
 import { useSlideshowClock } from '@/composables/useSlideshowClock'
+import { useMatchContext } from '@/composables/useMatchContext'
 
 const isInGame = useIsInGame()
 
-// ── Slideshow (default view) ─────────────────────────────────────────────────
-// When no inhibitor is down, the side panel cycles through these labels instead
-// of a static patch number. Rotace jede na SDÍLENÝCH hodinách (useSlideshowClock),
-// stejných jako bannery v LFramu — texty i bannery se tak přepínají naráz ve
-// stejný okamžik a nikdy se nerozjedou. LFrame je master kadence.
-const SLIDES = ['SEASON 2026', 'SPLIT 0', 'ČTVRTFINÁLE']
+// ── Slideshow (výchozí pohled) ───────────────────────────────────────────────
+// Dokud nepadne inhibitor, střídá panel název splitu a fázi: v základní části
+// týden („3. TÝDEN"), v play-off kolo („ČTVRTFINÁLE"). Obojí posílá web přes
+// agenta (useMatchContext), nic se nepřepisuje ručně. Rotace jede na sdílených
+// hodinách (useSlideshowClock), takže se přepíná ve stejný okamžik jako L-Frame.
+const match = useMatchContext()
+const slides = computed(() => {
+  const list = [match.value?.splitName, match.value?.stage]
+    .filter((text): text is string => Boolean(text))
+    .map((text) => text.toLocaleUpperCase('cs'))
+  return list.length ? list : ['INFERNAL LEAGUE']
+})
 const tick = useSlideshowClock()
-const currentSlide = computed(() => SLIDES[tick.value % SLIDES.length])
+const currentSlide = computed(() => slides.value[tick.value % slides.value.length])
+// Panel je vysoký 221 px a text běží svisle. Do 9 znaků (např. „SPLIT 0.5")
+// se vejde 30 px, delší kola („ČTVRTFINÁLE") se úměrně zmenší.
+const slideFontSize = computed(() => {
+  const length = currentSlide.value.length
+  return length <= 9 ? 30 : Math.max(20, Math.floor(30 * 9 / length))
+})
 
 // ── Inhibitor timers ───────────────────────────────────────────────────────
 const gameTime      = useIngameSelector((s) => s.gameData?.gameTime ?? 0, 0)
@@ -133,9 +146,9 @@ function inhibFill(inhib: InhibRow, gt: number): number {
 </script>
 
 <template>
-  <Transition name="pp">
+  <Transition name="strip">
     <div v-if="isInGame" class="ppanel">
-      <Transition name="swap" mode="out-in">
+      <Transition name="view" mode="out-in">
 
         <!-- ── Inhibitor view ───────────────────────────────────────── -->
         <div v-if="activeInhibs.length" key="inhibs" class="ppanel__inhibview">
@@ -201,8 +214,8 @@ function inhibFill(inhib: InhibRow, gt: number): number {
 
         <!-- ── Slideshow view (default) ─────────────────────────────── -->
         <div v-else key="slides" class="ppanel__patch">
-          <Transition name="slide" mode="out-in">
-            <span :key="currentSlide" class="ppanel__text">{{ currentSlide }}</span>
+          <Transition name="swap" mode="out-in">
+            <span :key="currentSlide" class="ppanel__text" :style="{ fontSize: slideFontSize + 'px' }">{{ currentSlide }}</span>
           </Transition>
         </div>
 
@@ -218,7 +231,10 @@ function inhibFill(inhib: InhibRow, gt: number): number {
   bottom: 0;
   width: 84px;
   height: 221px;
-  background: #090502;
+  background: var(--il-surface);
+  border-top: 1px solid var(--il-line);
+  border-left: 1px solid var(--il-divider);
+  --strip-delay: 120ms;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -241,7 +257,7 @@ function inhibFill(inhib: InhibRow, gt: number): number {
   font-weight: 700;
   font-size: 30px;
   letter-spacing: 0.12em;
-  color: rgba(249, 115, 22, 0.90); /* stejná oranžová jako „INFERNAL LEAGUE" v LFrame */
+  color: var(--il-ember); /* stejná oranžová jako „INFERNAL LEAGUE" v L-Framu */
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   white-space: nowrap;
@@ -352,20 +368,13 @@ function inhibFill(inhib: InhibRow, gt: number): number {
 }
 
 /* ── Transitions ─────────────────────────────────────────────── */
-.pp-enter-active   { transition: opacity 0.5s ease; }
-.pp-leave-active   { transition: opacity 0.3s ease; }
-.pp-enter-from,
-.pp-leave-to       { opacity: 0; }
 
-.swap-enter-active { transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
-.swap-leave-active { transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.55, 0, 1, 0.45); }
-.swap-enter-from,
-.swap-leave-to     { opacity: 0; transform: translateX(84px); }
+/* Přepnutí mezi slideshow a časovači inhibitorů: časovače přijíždějí zprava. */
+.view-enter-active { transition: opacity var(--il-swap) ease, transform var(--il-swap) var(--il-ease-out); }
+.view-leave-active { transition: opacity var(--il-out) ease, transform var(--il-out) var(--il-ease-in); }
+.view-enter-from,
+.view-leave-to     { opacity: 0; transform: translateX(84px); }
 
 /* Slideshow crossfade between labels (opacity only — the label keeps its
    rotate(180deg) base transform, so we must not animate transform here) */
-.slide-enter-active { transition: opacity 0.55s ease; }
-.slide-leave-active { transition: opacity 0.45s ease; }
-.slide-enter-from,
-.slide-leave-to     { opacity: 0; }
 </style>

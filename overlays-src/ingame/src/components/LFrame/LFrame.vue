@@ -1,287 +1,218 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useIsInGame } from '@/composables/useIngame'
+import { useMatchContext, type OverlayBriefTeam } from '@/composables/useMatchContext'
 import { useSlideshowClock } from '@/composables/useSlideshowClock'
 
 const isInGame = useIsInGame()
+const match = useMatchContext()
 
-// ── Rotující prezentace (spodní 2/3) ──────────────────────────────────────
-// Sponzorské bannery se auto-detekují ze složky `src/assets/sponsors/`.
-// Chceš přidat další? Prostě tam hoď soubor (banner4.png, sponsor-x.png, ...) —
-// Vite ho po restartu dev serveru (nebo `npm run build`) rovnou zařadí.
-// Podporované formáty: PNG, JPG, JPEG, WEBP, SVG, GIF.
-// Řadí se abecedně podle názvu souboru.
+// ── L-Frame vlevo dole ──────────────────────────────────────────────────────
+// Jedna plocha 305 × 220 px, která střídá:
+//   1. logo ligy a pod ním INFERNAL LEAGUE (vždy),
+//   2. další zápas večera (když je),
+//   3. obrázky z Admin → Media / Assets → In-game overlay (když jsou).
+// Obrázky i další zápas posílá web přes agenta (useMatchContext), takže výměna
+// sponzora nepotřebuje nové vydání agenta. Obrázek vyplní celou plochu,
+// v adminu se proto doporučuje 610 × 440 px.
 //
-// Rotace jede na sdílených hodinách (useSlideshowClock) — banner v LFramu i
-// texty v PatchPanelu vedle mapy se tak přepínají naráz ve stejný okamžik.
+// Rotace jede na sdílených hodinách (useSlideshowClock), stejně jako panel
+// vedle minimapy, takže se obě místa přepínají ve stejný okamžik.
 
-interface Slide {
-  type: 'text' | 'image' | 'video'
-  content: string   // text nebo src URL
-  subtitle?: string
-}
+type Slide =
+  | { kind: 'brand'; key: string }
+  | { kind: 'next'; key: string; time: string | null; a: OverlayBriefTeam; b: OverlayBriefTeam }
+  | { kind: 'image'; key: string; url: string }
 
-// eager: true → obrázky se rovnou zabalí do bundle (žádný async import za běhu)
-const bannerModules = import.meta.glob<{ default: string }>(
-  '@/assets/sponsors/*.{png,jpg,jpeg,webp,svg,gif}',
-  { eager: true },
-)
-const bannerUrls = Object.entries(bannerModules)
-  .sort(([a], [b]) => a.localeCompare(b))       // abecední pořadí podle názvu souboru
-  .map(([, mod]) => mod.default)
+const slides = computed<Slide[]>(() => {
+  const list: Slide[] = [{ kind: 'brand', key: 'brand' }]
+  const next = match.value?.nextMatch
+  if (next) {
+    list.push({ kind: 'next', key: 'next', time: pragueTime(next.scheduledAt), a: next.teamA, b: next.teamB })
+  }
+  for (const slide of match.value?.slides ?? []) {
+    list.push({ kind: 'image', key: `img-${slide.id}`, url: slide.url })
+  }
+  return list
+})
 
-const slides: Slide[] = bannerUrls.map(url => ({ type: 'image', content: url }))
-
-// Fallback: kdyby složka byla prázdná, ať se nezobrazí prázdný L Frame věčně
-if (slides.length === 0) {
-  slides.push({ type: 'text', content: 'INFERNAL LEAGUE', subtitle: 'SEASON 2026' })
-}
-
-// Sdílený tik (společný pro LFrame i PatchPanel) → slide index tohoto slideshow.
 const tick = useSlideshowClock()
-const slideIdx = computed(() => tick.value % slides.length)
-const current = computed(() => slides[slideIdx.value])
+
+// V ukázkovém režimu jde slide připíchnout adresou (?mock&lf=next / lf=image),
+// aby se dal zkontrolovat bez čekání na rotaci.
+const params = new URLSearchParams(location.search)
+const pinned = params.has('mock') ? params.get('lf') : null
+
+const current = computed(() =>
+  (pinned && slides.value.find((slide) => slide.kind === pinned))
+  || slides.value[tick.value % slides.value.length])
+
+function pragueTime(iso: string | null): string | null {
+  if (!iso) return null
+  return new Intl.DateTimeFormat('cs-CZ', {
+    timeZone: 'Europe/Prague', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso))
+}
 </script>
 
 <template>
-  <Transition name="lf">
+  <Transition name="strip">
     <div v-if="isInGame" class="lframe">
+      <Transition name="swap" mode="out-in">
 
-      <!-- ① Header (1/3): logo + název ligy -->
-      <div class="lframe__header">
-        <!-- Logo slot: vyměň div za <img src="/logo.png" class="lframe__logo-img" /> -->
-        <img src="/sponsors/logo.png" class="lframe__logo-img" alt="" />
-        <div class="lframe__league-name">
-          <span class="lframe__league-line1">INFERNAL</span>
-          <span class="lframe__league-line2">LEAGUE</span>
+        <!-- Logo ligy -->
+        <div v-if="current.kind === 'brand'" :key="current.key" class="lf-slide lf-brand">
+          <img src="/sponsors/logo.png" class="lf-brand__logo" alt="" />
+          <span class="lf-brand__name">INFERNAL LEAGUE</span>
         </div>
-      </div>
 
-      <!-- ② Body (2/3): rámeček s insetem → rotující prezentace uvnitř -->
-      <div class="lframe__body">
-        <div class="lframe__frame">
-          <Transition name="slide" mode="out-in">
-            <div :key="slideIdx" class="lframe__slide" :class="{ 'lframe__slide--media': current.type !== 'text' }">
-              <img
-                v-if="current.type === 'image'"
-                :src="current.content"
-                class="lframe__slide-img"
-                alt=""
-              />
-              <video
-                v-else-if="current.type === 'video'"
-                :src="current.content"
-                class="lframe__slide-img"
-                autoplay
-                loop
-                muted
-                playsinline
-              />
-              <template v-else>
-                <div class="lframe__slide-text">{{ current.content }}</div>
-                <div v-if="current.subtitle" class="lframe__slide-sub">
-                  {{ current.subtitle }}
-                </div>
-              </template>
+        <!-- Další zápas večera -->
+        <div v-else-if="current.kind === 'next'" :key="current.key" class="lf-slide lf-next">
+          <span class="lf-next__label">
+            DALŠÍ ZÁPAS<template v-if="current.time"> · {{ current.time }}</template>
+          </span>
+          <div class="lf-next__teams">
+            <div class="lf-next__team">
+              <img v-if="current.a.logoUrl" :src="current.a.logoUrl" class="lf-next__logo" alt="" />
+              <span v-else class="lf-next__logo lf-next__logo--empty">{{ (current.a.tag ?? current.a.name)[0] }}</span>
+              <span class="lf-next__name">{{ current.a.name }}</span>
             </div>
-          </Transition>
+            <span class="lf-next__vs">VS</span>
+            <div class="lf-next__team">
+              <img v-if="current.b.logoUrl" :src="current.b.logoUrl" class="lf-next__logo" alt="" />
+              <span v-else class="lf-next__logo lf-next__logo--empty">{{ (current.b.tag ?? current.b.name)[0] }}</span>
+              <span class="lf-next__name">{{ current.b.name }}</span>
+            </div>
+          </div>
         </div>
-      </div>
 
+        <!-- Obrázek z adminu přes celou plochu -->
+        <img v-else :key="current.key" :src="current.url" class="lf-slide lf-image" alt="" />
+
+      </Transition>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-/* ── Outer container ─────────────────────────────────────────────── */
-/* width: 305px = BottomPanel left offset → žádná mezera mezi nimi  */
-/* height: 220px = topline(2) + padding(16) + rows(190) + gaps(12) */
+/* 305 × 221 = šířka po spodní panel a výška spodního pruhu (1 px horní linka
+   + 220 px plochy). Obrázek z adminu vyplní celých 305 × 220. */
 .lframe {
   position: absolute;
   left: 0;
   bottom: 0;
   width: 305px;
-  height: 221px; /* border-box: 220px content + 1px border-top = 221px outer, matches BottomPanel */
-  display: grid;
-  /* header spans panel-top → sponsor-frame-top (logo+name centered in it);
-     body holds the 288×144 frame (151 − 7px bottom padding = 144) */
-  grid-template-rows: 69px 151px;
+  height: 221px;
+  overflow: hidden;
   pointer-events: none;
   z-index: 10;
-  background: #090502;
-  border-top: 1px solid rgba(249, 115, 22, 0.14);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 4px -4px 32px rgba(0, 0, 0, 0.40);
+  background: var(--il-surface);
+  border-top: 1px solid var(--il-line);
+  border-right: 1px solid var(--il-divider);
 }
 
-/* ── Header (1/3): logo + název ligy ────────────────────────────── */
-.lframe__header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 12px; /* vertically centered — 60px logo fits the 62px header */
-  overflow: hidden;
-}
-
-/* Logo box — nahraď za <img src="/logo.png" class="lframe__logo-img" /> */
-.lframe__logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.22), rgba(251, 188, 35, 0.12));
-  border: 1px solid rgba(249, 115, 22, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.lframe__logo-text {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 16px;
-  letter-spacing: 0.05em;
-  color: #fbbc23;
-  line-height: 1;
-}
-
-.lframe__logo-img {
-  width: 60px;
-  height: 60px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.lframe__league-name {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-  gap: 1px;
-}
-
-.lframe__league-line1 {
-  font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
-  font-size: 26px;
-  letter-spacing: 0.12em;
-  color: rgba(249, 115, 22, 0.90);
-}
-
-.lframe__league-line2 {
-  font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
-  font-size: 26px;
-  letter-spacing: 0.12em;
-  color: rgba(249, 115, 22, 0.90);
-}
-
-/* ── Body (2/3): padding → rámeček s prezentací ─────────────────── */
-.lframe__body {
-  padding: 0 8px 7px 8px; /* no top padding — frame top aligns with header bottom */
-  overflow: hidden;
-}
-
-/* Viditelný rámeček — vyplní celou vnitřní plochu body. */
-.lframe__frame {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 4px;
-  background: rgba(249, 115, 22, 0.04);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-/* Border drawn as an overlay ON TOP of the banner (pseudo-element paints after
-   the child slide), so a full-bleed 288×144 banner fills the whole box and the
-   1px orange line sits over its outer edge — banner tucks ~1px behind the frame. */
-.lframe__frame::after {
-  content: '';
+.lf-slide {
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  border-radius: 4px;
-  /* Thick frame overlaying the banner edges: solid orange at the very edge,
-     fading to fully transparent toward the center on all four sides. */
-  background:
-    linear-gradient(to bottom, rgba(249, 115, 22, 1) 0%, rgba(249, 115, 22, 0) 100%) top    / 100% 10px no-repeat,
-    linear-gradient(to top,    rgba(249, 115, 22, 1) 0%, rgba(249, 115, 22, 0) 100%) bottom / 100% 10px no-repeat,
-    linear-gradient(to right,  rgba(249, 115, 22, 1) 0%, rgba(249, 115, 22, 0) 100%) left   / 10px 100% no-repeat,
-    linear-gradient(to left,   rgba(249, 115, 22, 1) 0%, rgba(249, 115, 22, 0) 100%) right  / 10px 100% no-repeat;
 }
 
-.lframe__slide {
+/* ── Logo ligy ─────────────────────────────────────────────────── */
+.lf-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  text-align: center;
-  padding: 0 10px;
-  width: 100%;
+  gap: 14px;
+  background: radial-gradient(ellipse at 50% 42%, var(--il-ember-glow) 0%, transparent 62%);
 }
-
-/* Image / video slides fill the entire frame edge-to-edge (no padding, no letterbox) */
-.lframe__slide--media {
-  position: absolute;
-  inset: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.lframe__slide-img {
-  max-width: 100%;
-  max-height: 100%;
+.lf-brand__logo {
+  width: 104px;
+  height: 104px;
   object-fit: contain;
+  filter: drop-shadow(0 0 18px var(--il-ember-glow));
+}
+.lf-brand__name {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 27px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--il-ember);
+  /* Mezera za posledním písmenem by text opticky posunula doleva. */
+  margin-right: -0.16em;
 }
 
-.lframe__slide--media .lframe__slide-img {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  object-fit: cover;
-  display: block;
+/* ── Další zápas ───────────────────────────────────────────────── */
+.lf-next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 0 14px;
 }
-
-.lframe__slide-text {
-  font-family: 'Bebas Neue', sans-serif;
+.lf-next__label {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
   font-size: 18px;
-  letter-spacing: 0.10em;
-  color: rgba(249, 115, 22, 0.90);
-  white-space: nowrap;
   line-height: 1;
+  letter-spacing: 0.14em;
+  color: var(--il-ember);
 }
-
-.lframe__slide-sub {
+.lf-next__teams {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.lf-next__team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.lf-next__logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.lf-next__logo--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--il-line);
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  color: rgba(255, 255, 255, 0.38);
+  font-size: 28px;
+  color: var(--il-text-dim);
+}
+.lf-next__name {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+  color: var(--il-text);
+}
+.lf-next__vs {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--il-text-dim);
+  padding-bottom: 32px; /* VS v úrovni log, ne názvů */
 }
 
-/* ── Transitions ─────────────────────────────────────────────────── */
-.lf-enter-active {
-  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+/* ── Obrázek z adminu ──────────────────────────────────────────── */
+.lf-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.lf-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-.lf-enter-from,
-.lf-leave-to {
-  opacity: 0;
-  transform: translateX(-16px);
-}
-
-.slide-enter-active { transition: opacity 0.4s ease; }
-.slide-leave-active { transition: opacity 0.25s ease; }
-.slide-enter-from,
-.slide-leave-to     { opacity: 0; }
 </style>
