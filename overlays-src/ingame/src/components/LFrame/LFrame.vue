@@ -63,12 +63,12 @@ function pragueTime(iso: string | null): string | null {
         <!-- Logo ligy -->
         <div v-if="current.kind === 'brand'" :key="current.key" class="lf-slide lf-brand">
           <img src="/sponsors/logo.png" class="lf-brand__logo" alt="" />
-          <span class="lf-brand__name">INFERNAL LEAGUE</span>
+          <span class="lf-brand__name il-fire">INFERNAL LEAGUE</span>
         </div>
 
         <!-- Další zápas večera -->
         <div v-else-if="current.kind === 'next'" :key="current.key" class="lf-slide lf-next">
-          <span class="lf-next__label">
+          <span class="lf-next__label il-fire">
             DALŠÍ ZÁPAS<template v-if="current.time"> · {{ current.time }}</template>
           </span>
           <div class="lf-next__teams">

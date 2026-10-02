@@ -591,6 +591,9 @@ function fmtDiff(diff: number): string {
 /* ─── TEAM SECTIONS ─────────────────────────────────────────────── */
 .team {
   flex: 1;
+  /* Bez min-width: 0 by tým s identitou (230) a statistikami přerostl
+     polovinu panelu a gold by zajel pod skóre uprostřed. */
+  min-width: 0;
   display: flex;
   align-items: flex-end;
   gap: 0;
@@ -794,17 +797,19 @@ function fmtDiff(diff: number): string {
   align-items: center;
   align-self: center;           /* vertically centered in panel */
   justify-content: flex-end;   /* push stats toward center (left team) */
-  gap: 28px;                   /* space between tower slot and gold slot */
-  padding: 0 32px 0 8px;      /* right padding = gap toward center module */
+  /* Rozpočet šířky: identita 230 + věže 60 + mezera 14 + gold 128
+     + odstup od skóre 16 = 448 z 450 px poloviny panelu. */
+  gap: 14px;
+  padding: 0 16px 0 0;        /* right padding = gap toward center module */
 }
 .team__stats--r {
   justify-content: flex-start; /* push stats toward center (right team) */
-  padding: 0 8px 0 32px;      /* left padding = gap toward center module */
+  padding: 0 0 0 16px;        /* left padding = gap toward center module */
 }
 
 /* Single stat: fixed-width slot, content centered */
 .hstat {
-  width: 74px;
+  width: 60px;
   flex-shrink: 0;
   flex-grow: 0;
   display: flex;
@@ -819,7 +824,7 @@ function fmtDiff(diff: number): string {
 
 /* Gold slot: wider to fit number + accommodate diff below */
 .hstat--gold {
-  width: 108px;
+  width: 128px;
   /* gap inherited from .hstat (8px) */
 }
 
@@ -884,8 +889,8 @@ function fmtDiff(diff: number): string {
 .ic {
   display: block;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
 }
 

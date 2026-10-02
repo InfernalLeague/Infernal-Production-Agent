@@ -215,7 +215,7 @@ function inhibFill(inhib: InhibRow, gt: number): number {
         <!-- ── Slideshow view (default) ─────────────────────────────── -->
         <div v-else key="slides" class="ppanel__patch">
           <Transition name="swap" mode="out-in">
-            <span :key="currentSlide" class="ppanel__text" :style="{ fontSize: slideFontSize + 'px' }">{{ currentSlide }}</span>
+            <span :key="currentSlide" class="ppanel__text il-fire il-fire--vertical" :style="{ fontSize: slideFontSize + 'px' }">{{ currentSlide }}</span>
           </Transition>
         </div>
 

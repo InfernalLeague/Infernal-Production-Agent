@@ -31,6 +31,8 @@ body {
 :root {
   /* Spodní pruh (L-Frame, hráči, panel u minimapy, minimapa) — plný. */
   --il-surface: #0a0603;
+  /* Panel hráčů — přes spodní okraj hry, hra pod ním prosvítá. */
+  --il-surface-players: rgba(10, 6, 3, 0.62);
   /* Horní panel a objektivy — přes hru, takže lehce průhledné. */
   --il-surface-glass: rgba(10, 6, 3, 0.78);
   --il-line: rgba(249, 115, 22, 0.22);
@@ -38,6 +40,11 @@ body {
 
   --il-ember: #f97316;
   --il-ember-glow: rgba(249, 115, 22, 0.16);
+  /* Žhavý přechod pro nápisy ligy (stejný jako „fire flow" na webu).
+     Opakuje se, aby plynulé posouvání nemělo viditelný šev. */
+  --il-fire: linear-gradient(90deg,
+    #ff4d00 0%, #ff8a00 20%, #ffd166 35%, #ff8a00 50%,
+    #ff4d00 70%, #ff8a00 85%, #ff4d00 100%);
   --il-blue-side: #fbbf24;
   --il-red-side: #ef4444;
 
@@ -78,3 +85,31 @@ body {
 }
 .swap-enter-from { transform: translateY(10px); opacity: 0; }
 .swap-leave-to   { transform: translateY(-10px); opacity: 0; }
+
+/* Nápis v žhavém přechodu, který pomalu plyne (INFERNAL LEAGUE, DALŠÍ ZÁPAS,
+   panel u minimapy). Na prvek se dává třída il-fire. Svisle psaný text
+   (writing-mode: vertical-*) má přechod otočený podél textu: il-fire--vertical. */
+.il-fire {
+  background-image: var(--il-fire);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--il-ember);
+  animation: il-fire-flow 8s linear infinite;
+}
+.il-fire--vertical {
+  background-image: linear-gradient(180deg,
+    #ff4d00 0%, #ff8a00 20%, #ffd166 35%, #ff8a00 50%,
+    #ff4d00 70%, #ff8a00 85%, #ff4d00 100%);
+  background-size: 100% 200%;
+  animation-name: il-fire-flow-vertical;
+}
+@keyframes il-fire-flow {
+  from { background-position: 0% 0; }
+  to   { background-position: -200% 0; }
+}
+@keyframes il-fire-flow-vertical {
+  from { background-position: 0 0%; }
+  to   { background-position: 0 -200%; }
+}

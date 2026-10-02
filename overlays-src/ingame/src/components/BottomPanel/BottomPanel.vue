@@ -1020,9 +1020,10 @@ function tpCd(sec: number): string {
   bottom: 0;
   left: 305px;
   right: 305px;
-  background: var(--il-surface);
+  /* Panel hráčů je přes spodní okraj hry, takže je průhlednější než L-Frame
+     a panel u minimapy, které nesou obrázky a nápisy. */
+  background: var(--il-surface-players);
   border-top: 1px solid var(--il-line);
-  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.40);
   /* Spodní pruh vyjíždí zleva doprava: L-Frame, hráči, panel u minimapy. */
   --strip-delay: 60ms;
 }
@@ -1537,30 +1538,31 @@ function tpCd(sec: number): string {
 }
 
 /* ── Item stack counter (Dark Seal / Mejai's / trinket vision-score) ─── */
+/* Jen číslo, bez rámečku — čitelnost drží obrys ze stínu ve čtyřech směrech,
+   stejně jako u odpočtů cooldownů. Bez rámečku může být číslo větší. */
 .plyr__item-stacks {
   position: absolute;
-  bottom: -3px;
-  right: -3px;
+  bottom: -4px;
+  right: -2px;
   z-index: 3;
-  min-width: 13px;
-  padding: 1px 3px;
-  background: rgba(0, 0, 0, 0.82);
-  border: 1px solid rgba(249, 115, 22, 0.55);
-  border-radius: 2px;
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
-  font-size: 10px;
+  font-size: 15px;
   line-height: 1;
   color: rgba(255, 255, 255, 0.98);
-  text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95);
+  text-align: right;
+  text-shadow:
+    0 0 3px #000,
+    1px 1px 1px #000, -1px 1px 1px #000,
+    1px -1px 1px #000, -1px -1px 1px #000;
   pointer-events: none;
 }
 /* Blue side: all item badges (trinket vision-score + Dark Seal / Mejai stacks)
    sit in the bottom-LEFT corner, mirroring red side's bottom-right. */
 .plyr--y .plyr__item-stacks {
   right: auto;
-  left: -3px;
+  left: -2px;
+  text-align: left;
 }
 .plyr__item-img {
   width: 100%;
