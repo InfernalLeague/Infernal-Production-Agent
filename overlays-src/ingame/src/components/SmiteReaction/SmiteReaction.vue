@@ -245,7 +245,8 @@ function fmtReaction(s: number): string {
   font-size: 22px;
   line-height: 1;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
+  /* Nick junglera se píše přesně, jak si ho zvolil. */
+  text-transform: none;
   color: rgba(255, 255, 255, 0.98);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
   white-space: nowrap;

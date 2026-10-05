@@ -1270,7 +1270,8 @@ function tpCd(sec: number): string {
   line-height: 1;
   color: rgba(255, 255, 255, 1.0);
   letter-spacing: 0.05em;
-  text-transform: uppercase;
+  /* Nick hráče se píše přesně, jak si ho zvolil. */
+  text-transform: none;
 }
 .plyr__name--y { justify-content: flex-end; }   /* blue: name hugs center side */
 .plyr__name--r { justify-content: flex-start; } /* red: name hugs center side */
