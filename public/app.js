@@ -598,7 +598,7 @@ function renderRows(tbodyId, players, lane14) {
       `<td class="p-cell"><div class="p-wrap">${ava}<span class="p-id"><span class="p-name">${esc(p.name)}</span><span class="p-champ">${esc(p.championName)}${p.soloKills ? ` · ${p.soloKills} solo` : ""}</span></span></div></td>` +
       `<td class="c-lvl">${p.level}</td>` +
       `<td class="c-kda"><b>${p.kills}</b><span class="sep">/</span><span class="d">${p.deaths}</span><span class="sep">/</span><b>${p.assists}</b></td>` +
-      `<td>${p.cs}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}${laneDiff(p, lane14)}</td>` +
+      `<td>${p.cs}${laneCsDiff(p, lane14)}</td><td class="c-gold">${p.gold == null ? "—" : fmtGold(p.gold)}${laneDiff(p, lane14)}</td>` +
       `<td><span class="item-list">${items || "—"}</span></td>`;
     tb.appendChild(tr);
   }
@@ -624,6 +624,14 @@ function laneDiff(p, lane14) {
   if (!row || row.goldDiff == null) return "";
   const d = row.goldDiff;
   return `<span class="gdiff ${d > 0 ? "pos" : d < 0 ? "neg" : ""}" title="Rozdíl goldu proti protivníkovi na stejné roli ve 14. minutě">@14 ${fmtDiff(d)}</span>`;
+}
+/** Rozdíl CS proti protivníkovi na stejné roli ve 14. minutě (jakmile je zaznamenaný). */
+function laneCsDiff(p, lane14) {
+  if (!lane14 || p.slot == null) return "";
+  const row = lane14.players.find((l) => l.side === p.side && l.slot === p.slot);
+  if (!row || row.csDiff == null) return "";
+  const d = row.csDiff;
+  return `<span class="gdiff ${d > 0 ? "pos" : d < 0 ? "neg" : ""}" title="Rozdíl CS proti protivníkovi na stejné roli ve 14. minutě">@14 ${fmtDiff(d)}</span>`;
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 

@@ -193,7 +193,8 @@ export class GameSession {
   }
 
   /**
-   * Gold hráčů ve 14. minutě, jednou za hru. Bere se první snapshot se
+   * Gold a CS hráčů ve 14. minutě, jednou za hru. CS je ze stejného snímku
+   * LeagueBroadcastu — na rozdíl od Live API není zaokrouhlené na desítky. Bere se první snapshot se
    * všemi goldy v intervalu 14:00–15:00; když Agent naběhne později,
    * hodnota zůstane prázdná — pozdější gold by už o 14. minutě nic neříkal.
    */
@@ -217,6 +218,8 @@ export class GameSession {
           gold: player.gold ?? 0,
           opponentChampion: opponent?.championName ?? null,
           goldDiff: opponent?.gold != null && player.gold !== null ? player.gold - opponent.gold : null,
+          cs: player.cs,
+          csDiff: opponent ? player.cs - opponent.cs : null,
         };
       }),
     };

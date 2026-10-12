@@ -98,6 +98,7 @@ export class TxtExporter {
     out.push(`slot=${num(p.slot)}`);
     out.push(`opponent=${p.opponentChampion ?? ""}`);
     out.push(`gold_diff_at_14=${num(p.goldDiffAt14)}`);
+    out.push(`cs_diff_at_14=${num(p.csDiffAt14)}`);
     out.push(`pentakills=${p.pentakills}`);
     out.push(`solo_kills=${p.soloKills}`);
     out.push(`items=${p.items.join(";")}`);

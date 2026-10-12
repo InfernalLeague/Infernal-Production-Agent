@@ -16,7 +16,7 @@ import { emptyObjectives } from "../league/objectives.js";
  * Vision a ostatní dostupné statistiky mají zdroj "live".
  *
  * Rozdíl goldu hráče je proti protivníkovi na stejné roli (stejný `slot`
- * na druhé straně) a bere se jen ve 14. minutě.
+ * na druhé straně) a bere se jen ve 14. minutě. Stejně tak rozdíl CS.
  */
 export function buildConfirmedGame(
   meta: GameMeta,
@@ -50,6 +50,7 @@ export function buildConfirmedGame(
 
   const players: ConfirmedPlayer[] = snapshot.players.map((p) => {
     const slot = p.slot ?? null;
+    const lane14 = laneGoldAt14?.players.find((lane) => lane.side === p.side && lane.slot === slot);
     const opponent =
       slot === null ? null : snapshot.players.find((o) => o.side === other(p.side) && o.slot === slot) ?? null;
     return {
@@ -73,8 +74,8 @@ export function buildConfirmedGame(
       summonerSpells: p.summonerSpells,
       slot,
       opponentChampion: opponent?.championName ?? null,
-      goldDiffAt14:
-        laneGoldAt14?.players.find((lane) => lane.side === p.side && lane.slot === slot)?.goldDiff ?? null,
+      goldDiffAt14: lane14?.goldDiff ?? null,
+      csDiffAt14: lane14?.csDiff ?? null,
       sources: {
         kills: "live",
         deaths: "live",

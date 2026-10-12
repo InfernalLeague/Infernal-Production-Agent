@@ -232,19 +232,23 @@ test("spectator: věže jako Turret_TOrder_… z Live API, draci z LeagueBroadca
   assert.equal(session.suggestWinnerSide(), "RED");
 });
 
-function goldSnapshot(gameTime: number, gold: [number, number, number, number]): BroadcastGameSnapshot {
-  const player = (side: "BLUE" | "RED", slot: number, championName: string, value: number): LivePlayerState => ({
+function goldSnapshot(
+  gameTime: number,
+  gold: [number, number, number, number],
+  cs: [number, number, number, number] = [100, 100, 100, 100],
+): BroadcastGameSnapshot {
+  const player = (side: "BLUE" | "RED", slot: number, championName: string, value: number, creeps: number): LivePlayerState => ({
     name: `${side}-${slot}`, side, championName, level: 10, kills: 0, deaths: 0, assists: 0,
-    cs: 100, gold: value, vision: 10, pentakills: 0, soloKills: 0, items: [], slot,
+    cs: creeps, gold: value, vision: 10, pentakills: 0, soloKills: 0, items: [], slot,
   });
   return {
     capturedAt: new Date().toISOString(),
     gameTime,
     players: [
-      player("BLUE", 0, "Ornn", gold[0]),
-      player("BLUE", 1, "Vi", gold[1]),
-      player("RED", 0, "Gnar", gold[2]),
-      player("RED", 1, "Lee Sin", gold[3]),
+      player("BLUE", 0, "Ornn", gold[0], cs[0]),
+      player("BLUE", 1, "Vi", gold[1], cs[1]),
+      player("RED", 0, "Gnar", gold[2], cs[2]),
+      player("RED", 1, "Lee Sin", gold[3], cs[3]),
     ],
     teamKills: { BLUE: 0, RED: 0 },
     teamGold: { BLUE: gold[0] + gold[1], RED: gold[2] + gold[3] },
@@ -276,7 +280,7 @@ test("gold hráčů se čte jen jednou, ve 14. minutě, s rozdílem proti protiv
     ".",
   );
   assert.equal(session.applyBroadcast(goldSnapshot(830, [4000, 3500, 3700, 3600])).laneGold, null, "před 14:00 ne");
-  const lane = session.applyBroadcast(goldSnapshot(841, [4200, 3600, 3700, 3900])).laneGold;
+  const lane = session.applyBroadcast(goldSnapshot(841, [4200, 3600, 3700, 3900], [131, 88, 117, 96])).laneGold;
   assert.ok(lane);
   assert.equal(session.applyBroadcast(goldSnapshot(871, [4500, 3700, 3800, 4000])).laneGold, null, "jen jednou");
   session.applyBroadcast(goldSnapshot(1500, [9000, 7000, 8000, 8200]));
@@ -286,8 +290,10 @@ test("gold hráčů se čte jen jednou, ve 14. minutě, s rozdílem proti protiv
   const top = game.players.find((player) => player.side === "BLUE" && player.slot === 0)!;
   assert.equal(top.opponentChampion, "Gnar");
   assert.equal(top.goldDiffAt14, 500);
+  assert.equal(top.csDiffAt14, 14);
   const redJungle = game.players.find((player) => player.side === "RED" && player.slot === 1)!;
   assert.equal(redJungle.goldDiffAt14, 300);
+  assert.equal(redJungle.csDiffAt14, 8);
   assert.equal(game.laneGoldAt14?.gameTime, 841);
   assert.equal(game.teams[0]?.goldDiff, -200);
 });

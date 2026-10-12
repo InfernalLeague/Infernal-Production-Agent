@@ -137,6 +137,8 @@ export interface ConfirmedPlayer {
   opponentChampion: string | null;
   /** Gold hráče minus gold protivníka na stejné roli ve 14. minutě. */
   goldDiffAt14: number | null;
+  /** CS hráče minus CS protivníka na stejné roli ve 14. minutě. */
+  csDiffAt14: number | null;
 
   sources: {
     kills: ValueSource;
@@ -224,9 +226,13 @@ export interface LaneGoldPlayer {
   opponentChampion: string | null;
   /** Gold hráče minus gold protivníka na stejné roli. */
   goldDiff: number | null;
+  /** CS ze stejného snímku. Recovery snapshot ze starší verze ho nemá. */
+  cs?: number;
+  /** CS hráče minus CS protivníka na stejné roli. */
+  csDiff?: number | null;
 }
 
-/** Jednorázový záznam goldu hráčů ve 14. minutě hry. */
+/** Jednorázový záznam goldu a CS hráčů ve 14. minutě hry. */
 export interface LaneGoldAt14 {
   gameTime: number;
   players: LaneGoldPlayer[];
