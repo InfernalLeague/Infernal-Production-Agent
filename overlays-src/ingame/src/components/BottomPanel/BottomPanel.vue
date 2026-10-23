@@ -255,7 +255,7 @@ function normPlayer(sbPlayer: any, tabPlayer: any, wsTabPlayer: any, gt: number,
       cdPct,
       remaining,   // used by the quest slot to show the quest-teleport countdown
       id,
-      // Název a cena pro pruh „DOKONČIL" (useItemCompletions).
+      // Název a cena pro pruh dokončeného itemu (useItemCompletions).
       name: item.displayName ?? '',
       cost: item.cost ?? 0,
       isOrnn: isOrnnUpgrade(id, item.modifierUrl),
@@ -679,7 +679,7 @@ function tpCd(sec: number): string {
               <div v-if="banners['blue-' + i]" :key="banners['blue-' + i]!.seq" class="plyr-done plyr-done--y" :data-tone="banners['blue-' + i]!.tone">
                 <img :src="banners['blue-' + i]!.imageUrl" class="plyr-done__icon" alt="" />
                 <span class="plyr-done__text">
-                  <span class="plyr-done__label">{{ banners['blue-' + i]!.label }}</span>
+                  <span v-if="banners['blue-' + i]!.label" class="plyr-done__label">{{ banners['blue-' + i]!.label }}</span>
                   <span class="plyr-done__name">{{ banners['blue-' + i]!.title }}</span>
                 </span>
               </div>
@@ -875,7 +875,7 @@ function tpCd(sec: number): string {
               <div v-if="banners['red-' + i]" :key="banners['red-' + i]!.seq" class="plyr-done plyr-done--r" :data-tone="banners['red-' + i]!.tone">
                 <img :src="banners['red-' + i]!.imageUrl" class="plyr-done__icon" alt="" />
                 <span class="plyr-done__text">
-                  <span class="plyr-done__label">{{ banners['red-' + i]!.label }}</span>
+                  <span v-if="banners['red-' + i]!.label" class="plyr-done__label">{{ banners['red-' + i]!.label }}</span>
                   <span class="plyr-done__name">{{ banners['red-' + i]!.title }}</span>
                 </span>
               </div>

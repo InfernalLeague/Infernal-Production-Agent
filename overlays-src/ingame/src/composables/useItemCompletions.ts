@@ -3,7 +3,7 @@ import type { PushBanner } from './useRowBanners'
 
 // ── Dokončený item ──────────────────────────────────────────────────────────
 // Když hráči v inventáři přibyde dokončený item, přes jeho řádek ve spodním
-// panelu vyjede pruh „DOKONČIL · NAVORI FLICKERBLADE" s ikonou itemu.
+// panelu vyjede pruh s ikonou a názvem itemu („NAVORI FLICKERBLADE"), bez štítku.
 //
 // Dokončený item = item za 2000 goldů a víc. Suroviny, boty a lektvary jsou
 // levnější, takže se tím odfiltrují bez seznamu ID, který by po každém patchi
@@ -38,7 +38,7 @@ export function useItemCompletions(blue: Ref<PanelPlayer[]>, red: Ref<PanelPlaye
 
       for (const item of items) {
         if (prev.ids.has(item.id) || (item.cost ?? 0) < MIN_COST) continue
-        push(key, { tone: 'item', label: 'DOKONČIL', title: (item.name ?? '').toUpperCase(), imageUrl: item.imageUrl ?? '' })
+        push(key, { tone: 'item', label: '', title: (item.name ?? '').toUpperCase(), imageUrl: item.imageUrl ?? '' })
       }
     })
   }
@@ -58,7 +58,7 @@ export function useItemCompletions(blue: Ref<PanelPlayer[]>, red: Ref<PanelPlaye
     let i = 0
     const next = () => {
       const [key, title, imageUrl] = samples[i++ % samples.length]
-      push(key, { tone: 'item', label: 'DOKONČIL', title, imageUrl })
+      push(key, { tone: 'item', label: '', title, imageUrl })
     }
     next()
     const demo = setInterval(next, 4_000)

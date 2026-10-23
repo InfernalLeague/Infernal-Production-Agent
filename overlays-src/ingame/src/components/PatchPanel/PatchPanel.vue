@@ -57,9 +57,8 @@ const LANE: Record<string | number, string> = {
 // BlueBottle does not guarantee [blue, red]. Prefer the explicit fields and
 // only fall back to the index if none of them are usable.
 //
-// NOTE: this resolves the team that DESTROYED the inhibitor. The respawn timer
-// belongs to the team whose inhibitor was destroyed (the owner), i.e. the
-// OPPOSITE side — see activeInhibs, where we flip it before display.
+// Tým skupiny je VLASTNÍK inhibitoru (ověřeno ve hře 2026-10-23: když red
+// zničí inhibitor, přijde pod blue). Odpočet tedy patří přímo této straně.
 function resolveTeam(teamData: any, idx: number): 0 | 1 {
   const teamid = teamData?.teamid
   if (teamid === 100) return 0
@@ -93,10 +92,8 @@ const activeInhibs = computed((): InhibRow[] => {
   data.forEach((teamData: any, idx: number) => {
     const inhibs = teamData?.inhibitors
     if (!inhibs || typeof inhibs !== 'object') return
-    // The payload groups a destroyed inhibitor under the team that destroyed it,
-    // but the respawn countdown belongs to the owner — the OPPOSITE side. So if
-    // red destroys an inhibitor, the timer must show on blue side, and vice versa.
-    const team = (resolveTeam(teamData, idx) === 0 ? 1 : 0) as 0 | 1
+    // Skupina = vlastník inhibitoru: red zničí blue inhibitor → odpočet na blue straně.
+    const team = resolveTeam(teamData, idx)
     for (const [key, inhib] of Object.entries(inhibs as Record<string, any>)) {
       const i = inhib as any
       if (i.timeAlive == null || i.timeAlive <= gt) continue

@@ -374,25 +374,25 @@ const MOCK_TABS = {
 }
 
 // ── Inhibitor respawn timers ──────────────────────────────────────────────
-// inhibitors: teamInhibitorData[] — each team object groups the inhibitors that
-// team DESTROYED. The respawn timer belongs to the owner (the opposite side), so
-// PatchPanel flips the side before display: CHAOS destroyed → blue timer, etc.
+// inhibitors: teamInhibitorData[] — each team object groups its OWN inhibitors
+// (the owner), so the timer shows on that team's side: red destroys blue's
+// inhibitor → it arrives under ORDER → blue timer.
 // IngameObjectiveType: INHIBITOR_L0=12 (bot), L1=13 (mid), L2=14 (top)
 // timeAlive > GT → inhibitor is destroyed, countdown running
 const MOCK_INHIBITORS = [
   {
-    // ORDER (blue) destroyed red's MID inhibitor → shows on red side
+    // Blue's BOT + TOP inhibitors destroyed by red → shows on blue side
     team: 'ORDER', teamid: 100, side: 0,
-    inhibitors: {
-      '1': { type: 13, timeDestroy: GT - 165, timeAlive: GT + 45 },  // red MID — 0:45 left
-    },
-  },
-  {
-    // CHAOS (red) destroyed blue's BOT + TOP inhibitors → shows on blue side
-    team: 'CHAOS', teamid: 200, side: 1,
     inhibitors: {
       '0': { type: 12, timeDestroy: GT - 120, timeAlive: GT + 90 },  // blue BOT — 1:30 left
       '2': { type: 14, timeDestroy: GT -  60, timeAlive: GT + 150 }, // blue TOP — 2:30 left
+    },
+  },
+  {
+    // Red's MID inhibitor destroyed by blue → shows on red side
+    team: 'CHAOS', teamid: 200, side: 1,
+    inhibitors: {
+      '1': { type: 13, timeDestroy: GT - 165, timeAlive: GT + 45 },  // red MID — 0:45 left
     },
   },
 ]

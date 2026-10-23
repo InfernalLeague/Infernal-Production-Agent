@@ -12,7 +12,7 @@ export type BannerTone = 'item' | 'milestone' | 'record'
 export interface RowBanner {
   seq: number
   tone: BannerTone
-  /** Malý štítek nad hlavním textem („DOKONČIL", „MILNÍK"…). */
+  /** Malý štítek u hlavního textu („MILNÍK"…); prázdný = bez štítku (dokončený item). */
   label: string
   title: string
   imageUrl: string
