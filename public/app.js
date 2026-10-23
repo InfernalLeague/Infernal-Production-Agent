@@ -663,6 +663,35 @@ function showOverlays(show) {
 $("overlaysBack").onclick = () => showOverlays(false);
 document.querySelectorAll(".mock-cb").forEach((cb) => (cb.onchange = () => loadOverlay(cb.dataset.mock)));
 
+// Zkouška milníků a rekordů z ligy: pruh přes řádek hráče v náhledu i v OBS.
+// Texty odpovídají tomu, co overlay ukáže ve hře (useLeagueMilestones).
+const FX_SAMPLES = [
+  ["50. kill", "milestone", "50. KILL V INFERNAL LEAGUE"],
+  ["100. kill", "milestone", "100. KILL V INFERNAL LEAGUE"],
+  ["100. asistence", "milestone", "100. ASISTENCE V INFERNAL LEAGUE"],
+  ["50. smrt", "milestone", "50. SMRT V INFERNAL LEAGUE"],
+  ["První pentakill", "milestone", "PRVNÍ PENTAKILL V INFERNAL LEAGUE"],
+  ["2. pentakill", "milestone", "2. PENTAKILL V INFERNAL LEAGUE"],
+  ["25. hra", "milestone", "25. HRA V INFERNAL LEAGUE"],
+  ["Rekord: killy", "record", "KILLY · 17"],
+  ["Rekord: asistence", "record", "ASISTENCE · 26"],
+  ["Rekord: smrti", "record", "SMRTI · 14"],
+];
+$("fxButtons").innerHTML = FX_SAMPLES.map(([name, tone], i) =>
+  `<button class="btn btn-sm ${tone === "record" ? "" : "btn-ghost"}" data-fx="${i}">${esc(name)}</button>`).join("");
+document.querySelectorAll("[data-fx]").forEach((b) => (b.onclick = async () => {
+  const [, tone, title] = FX_SAMPLES[Number(b.dataset.fx)];
+  const label = tone === "record" ? "NOVÝ REKORD LIGY" : "MILNÍK";
+  try {
+    const r = await fetch("/api/overlay/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ row: $("fxRow").value, tone, label, title }),
+    });
+    if (!r.ok) throw new Error();
+  } catch { toast("Pruh se nepodařilo poslat", "err"); }
+}));
+
 $("urlIngame").textContent = overlayUrl("ingame");
 document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
   const text = $(b.dataset.copy).textContent;

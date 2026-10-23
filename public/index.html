@@ -145,6 +145,20 @@
         <label class="mock-toggle"><input type="checkbox" class="mock-cb" data-mock="ingame" checked /> Náhled s mock daty</label>
       </div>
       <p class="hint">Náhled běží na mock datech. Pro živý provoz odškrtni mock — ingame overlay pak potřebuje běžící <b>LeagueBroadcast</b> (localhost:58869).</p>
+      <div class="overlay-bar fx-bar">
+        <span class="overlay-label">Zkouška · statistiky z ligy</span>
+        <div class="fx-buttons" id="fxButtons"></div>
+        <select id="fxRow" class="fx-row" title="Řádek hráče, přes který pruh vyjede">
+          <option value="">Náhodný hráč</option>
+          <option value="blue-0">Modří · Top</option><option value="blue-1">Modří · Jungle</option>
+          <option value="blue-2">Modří · Mid</option><option value="blue-3">Modří · ADC</option>
+          <option value="blue-4">Modří · Support</option>
+          <option value="red-0">Červení · Top</option><option value="red-1">Červení · Jungle</option>
+          <option value="red-2">Červení · Mid</option><option value="red-3">Červení · ADC</option>
+          <option value="red-4">Červení · Support</option>
+        </select>
+      </div>
+      <p class="hint">Pruh se ukáže v náhledu i v overlayi v OBS. Ve hře přijde sám, až hráč milníku nebo rekordu ligy opravdu dosáhne.</p>
       <div class="overlay-preview"><iframe data-lazy="ingame" title="Ingame overlay"></iframe></div>
     </section>
   </main>

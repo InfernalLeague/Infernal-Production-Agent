@@ -8,6 +8,7 @@ import ObjectiveFlash from '@/components/ObjectiveFlash/ObjectiveFlash.vue'
 import { useItemCompletions } from '@/composables/useItemCompletions'
 import { useLeagueMilestones } from '@/composables/useLeagueMilestones'
 import { useRowBanners } from '@/composables/useRowBanners'
+import { useTestBanners } from '@/composables/useTestBanners'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // Rune tree/style IDs (Precision, Domination, Sorcery, Inspiration, Resolve)
@@ -551,6 +552,7 @@ const hasPlayers = computed(() => bluePlayers.value.length > 0 || redPlayers.val
 const { active: banners, push: pushBanner } = useRowBanners()
 useItemCompletions(bluePlayers, redPlayers, pushBanner)
 useLeagueMilestones(bluePlayers, redPlayers, match, gameTime, pushBanner)
+useTestBanners(pushBanner)
 
 // ── Level-up flash ─────────────────────────────────────────────────────────
 // Tracks which players are currently showing a level-up animation.

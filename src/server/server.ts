@@ -36,6 +36,31 @@ export function startServer(manager: GameManager, autopilot: Autopilot): void {
     res.json(await overlayContext(manager));
   });
 
+  // Zkušební pruhy do overlaye (tlačítka v pohledu Overlaye): dashboard sem
+  // pošle milník, overlay — náhled i OBS — si ho do sekundy vyzvedne.
+  app.post("/api/overlay/test", (req, res) => {
+    const banner = req.body as Partial<TestBanner>;
+    if (!banner.title || !banner.label) return res.status(400).json({ error: "Chybí text pruhu." });
+    testBanners.push({
+      seq: ++testSeq,
+      at: Date.now(),
+      row: typeof banner.row === "string" ? banner.row : "",
+      tone: banner.tone === "record" ? "record" : "milestone",
+      label: String(banner.label),
+      title: String(banner.title),
+    });
+    while (testBanners.length > 20) testBanners.shift();
+    res.json({ ok: true });
+  });
+  app.get("/api/overlay/test", (req, res) => {
+    // Bez `after` (první dotaz po načtení overlaye) jen řekne, kde fronta je,
+    // ať refresh v OBS nepřehraje staré zkoušky.
+    const after = typeof req.query.after === "string" ? Number(req.query.after) : NaN;
+    if (!Number.isFinite(after)) return res.json({ seq: testSeq, banners: [] });
+    const fresh = testBanners.filter((b) => b.seq > after && Date.now() - b.at < TEST_BANNER_TTL_MS);
+    res.json({ seq: testSeq, banners: fresh });
+  });
+
   // Meta o aplikaci (verze pro roh dashboardu, mock flag).
   app.get("/api/meta", (_req, res) => res.json({ version: config.version, mock: config.mock }));
 
@@ -209,6 +234,19 @@ function listGames(): GameListItem[] {
   out.sort((a, b) => b.folder.localeCompare(a.folder));
   return out;
 }
+
+/** Zkušební pruh přes řádek hráče; `row` je `blue-0` … `red-4`, prázdný = náhodný řádek. */
+interface TestBanner {
+  seq: number;
+  at: number;
+  row: string;
+  tone: "milestone" | "record";
+  label: string;
+  title: string;
+}
+const TEST_BANNER_TTL_MS = 10_000;
+const testBanners: TestBanner[] = [];
+let testSeq = 0;
 
 /**
  * Data pro overlay aktuální hry, s krátkou pamětí.
