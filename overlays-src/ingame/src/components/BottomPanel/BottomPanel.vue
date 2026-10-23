@@ -4,6 +4,10 @@ import { useClient } from '@/client'
 import { useIngameSelector, useTabPlayers } from '@/composables/useIngame'
 import { nickFor, useMatchContext } from '@/composables/useMatchContext'
 import { getSortedInventory, getTrinket, getRoleQuest } from '@bluebottle_gg/league-broadcast-client'
+import ObjectiveFlash from '@/components/ObjectiveFlash/ObjectiveFlash.vue'
+import { useItemCompletions } from '@/composables/useItemCompletions'
+import { useLeagueMilestones } from '@/composables/useLeagueMilestones'
+import { useRowBanners } from '@/composables/useRowBanners'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // Rune tree/style IDs (Precision, Domination, Sorcery, Inspiration, Resolve)
@@ -250,6 +254,9 @@ function normPlayer(sbPlayer: any, tabPlayer: any, wsTabPlayer: any, gt: number,
       cdPct,
       remaining,   // used by the quest slot to show the quest-teleport countdown
       id,
+      // Název a cena pro pruh „DOKONČIL" (useItemCompletions).
+      name: item.displayName ?? '',
+      cost: item.cost ?? 0,
       isOrnn: isOrnnUpgrade(id, item.modifierUrl),
       // Only surface stacks for items where the count is meaningful to viewers.
       stacks: STACK_ITEM_IDS.has(id) && rawStacks > 0 ? rawStacks : null,
@@ -539,6 +546,12 @@ const redPlayers = computed(() => {
 
 const hasPlayers = computed(() => bluePlayers.value.length > 0 || redPlayers.value.length > 0)
 
+// Pruhy přes řádek hráče (klíč `blue-0` … `red-4`): dokončený item a milníky
+// z ligy sdílejí jednu frontu, aby se nepřekryly.
+const { active: banners, push: pushBanner } = useRowBanners()
+useItemCompletions(bluePlayers, redPlayers, pushBanner)
+useLeagueMilestones(bluePlayers, redPlayers, match, gameTime, pushBanner)
+
 // ── Level-up flash ─────────────────────────────────────────────────────────
 // Tracks which players are currently showing a level-up animation.
 // Key = champion alias (unique per game); value = new level number.
@@ -646,6 +659,8 @@ function tpCd(sec: number): string {
 <template>
   <Transition name="strip">
     <div v-if="hasPlayers" class="bpanel">
+      <!-- Drak / baron / věž: záblesk strany a štítek nad panelem (pod řádky hráčů). -->
+      <ObjectiveFlash />
       <div class="bpanel__topline" />
 
       <div class="bpanel__body">
@@ -657,6 +672,16 @@ function tpCd(sec: number): string {
             :key="i"
             class="plyr plyr--y"
           >
+            <!-- Dokončený item / milník z ligy: pruh přes celý řádek, ikona u středu panelu. -->
+            <Transition name="done">
+              <div v-if="banners['blue-' + i]" :key="banners['blue-' + i]!.seq" class="plyr-done plyr-done--y" :data-tone="banners['blue-' + i]!.tone">
+                <img :src="banners['blue-' + i]!.imageUrl" class="plyr-done__icon" alt="" />
+                <span class="plyr-done__text">
+                  <span class="plyr-done__label">{{ banners['blue-' + i]!.label }}</span>
+                  <span class="plyr-done__name">{{ banners['blue-' + i]!.title }}</span>
+                </span>
+              </div>
+            </Transition>
             <!-- ① Trinket -->
             <div class="plyr__item plyr__item--trinket" :class="{ 'plyr__item--cd': player.trinket && !player.trinket.ready }">
               <img v-if="player.trinket?.imageUrl" :src="player.trinket.imageUrl" class="plyr__item-img" />
@@ -844,6 +869,15 @@ function tpCd(sec: number): string {
             :key="i"
             class="plyr plyr--r"
           >
+            <Transition name="done">
+              <div v-if="banners['red-' + i]" :key="banners['red-' + i]!.seq" class="plyr-done plyr-done--r" :data-tone="banners['red-' + i]!.tone">
+                <img :src="banners['red-' + i]!.imageUrl" class="plyr-done__icon" alt="" />
+                <span class="plyr-done__text">
+                  <span class="plyr-done__label">{{ banners['red-' + i]!.label }}</span>
+                  <span class="plyr-done__name">{{ banners['red-' + i]!.title }}</span>
+                </span>
+              </div>
+            </Transition>
             <!-- ⑩ Champion (closest to center) -->
             <div class="plyr__champ plyr__champ--r">
               <div class="plyr__champ-clip">
@@ -1018,14 +1052,43 @@ function tpCd(sec: number): string {
 .bpanel {
   position: absolute;
   bottom: 0;
-  left: 305px;
-  right: 305px;
+  left: 310px;
+  right: 310px;
   /* Panel hráčů je přes spodní okraj hry, takže je průhlednější než L-Frame
      a panel u minimapy, které nesou obrázky a nápisy. */
-  background: var(--il-surface-players);
+  /* U krajů skoro plný, za 60 px přejde do průsvitného — bez schodu mezi
+     plným L-Framem / panelem u minimapy a prosvítající hrou. */
+  background: linear-gradient(90deg,
+    var(--il-surface-edge) 0,
+    var(--il-surface-players) 60px,
+    var(--il-surface-players) calc(100% - 60px),
+    var(--il-surface-edge) 100%);
   border-top: 1px solid var(--il-line);
   /* Spodní pruh vyjíždí zleva doprava: L-Frame, hráči, panel u minimapy. */
   --strip-delay: 60ms;
+}
+
+/* Horní linka s žhavým středem přes border-top: na krajích má stejnou
+   barvu jako sousední panely, takže celý spodní pruh tvoří jednu linku.
+   Pod ní slabá záře, jen dovnitř panelu. */
+.bpanel::before,
+.bpanel::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.bpanel::before {
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    var(--il-line) 0%, var(--il-line-hot) 50%, var(--il-line) 100%);
+}
+.bpanel::after {
+  top: 0;
+  height: 16px;
+  background: radial-gradient(ellipse 30% 100% at 50% 0%, var(--il-ember-glow) 0%, transparent 100%);
 }
 
 /* Linku nahoře nese border-top stejný jako u sousedních panelů; tenhle
@@ -1035,6 +1098,8 @@ function tpCd(sec: number): string {
 }
 
 .bpanel__body {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: stretch;
   padding: 7px 18px 9px 18px;
@@ -1094,6 +1159,7 @@ function tpCd(sec: number): string {
 
 /* ── Player row ───────────────────────────────────────────────────── */
 .plyr {
+  position: relative;
   display: flex;
   align-items: center;
   height: 38px;
@@ -1101,6 +1167,102 @@ function tpCd(sec: number): string {
   border-radius: 2px;
   padding: 0 4px;
 }
+
+/* ── Dokončený item: pruh přes řádek hráče ─────────────────────────
+   Ikona a text stojí u středu panelu (u championa), pruh slábne k okraji.
+   Přes něj jednou přejede ohnivý odlesk. */
+.plyr-done {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 2px;
+}
+.plyr-done--y {
+  flex-direction: row-reverse;
+  background: linear-gradient(270deg,
+    rgba(10, 6, 3, 0.97) 0%, rgba(10, 6, 3, 0.94) 55%, rgba(251, 191, 36, 0.22) 100%);
+  box-shadow: inset -3px 0 0 var(--il-blue-side);
+}
+.plyr-done--r {
+  background: linear-gradient(90deg,
+    rgba(10, 6, 3, 0.97) 0%, rgba(10, 6, 3, 0.94) 55%, rgba(239, 68, 68, 0.22) 100%);
+  box-shadow: inset 3px 0 0 var(--il-red-side);
+}
+.plyr-done::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 120px;
+  background: linear-gradient(90deg, transparent, rgba(255, 170, 60, 0.35), transparent);
+  transform: translateX(-140px) skewX(-20deg);
+  animation: plyr-done-shine 1.1s 0.25s var(--il-ease-out) forwards;
+}
+@keyframes plyr-done-shine {
+  to { transform: translateX(760px) skewX(-20deg); }
+}
+.plyr-done__icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  border: 1px solid rgba(249, 115, 22, 0.55);
+  box-shadow: 0 0 10px var(--il-ember-glow);
+}
+.plyr-done__text {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.plyr-done--y .plyr-done__text { flex-direction: row-reverse; }
+.plyr-done__label {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: var(--il-ember);
+}
+.plyr-done__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--il-text);
+}
+
+/* Milník a rekord ligy: logo ligy místo ikony itemu, rekord v ohnivé barvě. */
+.plyr-done[data-tone='milestone'] .plyr-done__icon,
+.plyr-done[data-tone='record'] .plyr-done__icon {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px var(--il-ember-glow));
+}
+.plyr-done[data-tone='record'] .plyr-done__label {
+  color: #ffd166;
+}
+.plyr-done[data-tone='record'] .plyr-done__name {
+  color: var(--il-ember);
+}
+
+/* Pruh vyjede od středu panelu k okraji a zase zajede. */
+.done-enter-active { transition: transform 420ms var(--il-ease-out), opacity 420ms ease; }
+.done-leave-active { transition: transform 280ms var(--il-ease-in), opacity 280ms ease; }
+.plyr-done--y.done-enter-from, .plyr-done--y.done-leave-to { transform: translateX(24px); opacity: 0; }
+.plyr-done--r.done-enter-from, .plyr-done--r.done-leave-to { transform: translateX(-24px); opacity: 0; }
 
 /*
  * Stat group: Items ↔ CS ↔ KDA ↔ Spells ↔ Ult — equal 8px gaps.

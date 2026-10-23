@@ -7,6 +7,7 @@ import LFrame          from '@/components/LFrame/LFrame.vue'
 import MinimapFrame    from '@/components/MinimapFrame/MinimapFrame.vue'
 import PatchPanel      from '@/components/PatchPanel/PatchPanel.vue'
 import SmiteReaction   from '@/components/SmiteReaction/SmiteReaction.vue'
+import StripSweep      from '@/components/StripSweep/StripSweep.vue'
 import DevMock from '@/components/DevMock/DevMock.vue'
 
 // Mock režim: buď dev build (VITE_MOCK=false ho vypne), NEBO ?mock v URL
@@ -24,6 +25,7 @@ const DEV = new URLSearchParams(location.search).has('mock')
       <ObjectiveTimers />
       <PatchPanel />
       <MinimapFrame />
+      <StripSweep />
       <SmiteReaction />
       <ConnectionStatus />
     </div>
@@ -36,6 +38,7 @@ const DEV = new URLSearchParams(location.search).has('mock')
     <ObjectiveTimers />
     <PatchPanel />
     <MinimapFrame />
+    <StripSweep />
     <SmiteReaction />
     <ConnectionStatus />
   </div>

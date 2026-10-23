@@ -37,6 +37,13 @@ body {
   --il-surface-glass: rgba(10, 6, 3, 0.78);
   --il-line: rgba(249, 115, 22, 0.22);
   --il-divider: rgba(255, 255, 255, 0.06);
+  /* Navázání spodního pruhu: panel hráčů je u krajů skoro plný, aby
+     plynule navázal na plné sousední panely, a mezi panely je svislá
+     ohnivá linka, která dolů slábne. Horní linka má uprostřed žhavý střed. */
+  --il-surface-edge: rgba(10, 6, 3, 0.92);
+  --il-divider-fire: linear-gradient(180deg,
+    rgba(249, 115, 22, 0.55) 0%, rgba(249, 115, 22, 0.14) 55%, rgba(249, 115, 22, 0) 100%);
+  --il-line-hot: rgba(249, 115, 22, 0.65);
 
   --il-ember: #f97316;
   --il-ember-glow: rgba(249, 115, 22, 0.16);

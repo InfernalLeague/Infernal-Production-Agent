@@ -8,24 +8,38 @@ const isInGame = useIsInGame()
 const match = useMatchContext()
 
 // ── L-Frame vlevo dole ──────────────────────────────────────────────────────
-// Jedna plocha 305 × 220 px, která střídá:
+// Jedna plocha 310 × 220 px, která střídá:
 //   1. logo ligy a pod ním INFERNAL LEAGUE (vždy),
-//   2. další zápas večera (když je),
-//   3. obrázky z Admin → Media / Assets → In-game overlay (když jsou).
+//   2. výzvu k podpoře ligy stupněm Infernal Flame (když je stupeň zapnutý),
+//   3. další zápas večera (když je),
+//   4. obrázky z Admin → Media / Assets → In-game overlay (když jsou).
 // Obrázky i další zápas posílá web přes agenta (useMatchContext), takže výměna
 // sponzora nepotřebuje nové vydání agenta. Obrázek vyplní celou plochu,
-// v adminu se proto doporučuje 610 × 440 px.
+// v adminu se proto doporučuje 620 × 440 px.
 //
 // Rotace jede na sdílených hodinách (useSlideshowClock), stejně jako panel
 // vedle minimapy, takže se obě místa přepínají ve stejný okamžik.
 
 type Slide =
   | { kind: 'brand'; key: string }
+  | { kind: 'flame'; key: string; name: string; badgeUrl: string | null }
   | { kind: 'next'; key: string; time: string | null; a: OverlayBriefTeam; b: OverlayBriefTeam }
   | { kind: 'image'; key: string; url: string }
 
 const slides = computed<Slide[]>(() => {
   const list: Slide[] = [{ kind: 'brand', key: 'brand' }]
+  // Název a odznak stupně posílá web (Admin → Supporter tiers). Bez napojené
+  // hry nebo se starším webem platí výchozí název; vypnutý stupeň (null) se
+  // neukazuje.
+  const supporter = match.value?.supporter
+  if (supporter !== null) {
+    list.push({
+      kind: 'flame',
+      key: 'flame',
+      name: supporter?.name ?? 'Infernal Flame',
+      badgeUrl: supporter?.badgeUrl ?? null,
+    })
+  }
   const next = match.value?.nextMatch
   if (next) {
     list.push({ kind: 'next', key: 'next', time: pragueTime(next.scheduledAt), a: next.teamA, b: next.teamB })
@@ -38,7 +52,19 @@ const slides = computed<Slide[]>(() => {
 
 const tick = useSlideshowClock()
 
-// V ukázkovém režimu jde slide připíchnout adresou (?mock&lf=next / lf=image),
+// Jiskry nad logem ligy: pevné pozice a časy, ať se overlay po refreshi
+// nechová pokaždé jinak (x v px od levého okraje L-Framu, délka a zpoždění
+// v sekundách, dx = boční drift).
+const SPARKS = [
+  { x: 96, d: 3.4, delay: 0.0, dx: -12 }, { x: 118, d: 4.1, delay: 1.2, dx: 8 },
+  { x: 132, d: 3.0, delay: 2.6, dx: -6 }, { x: 146, d: 4.6, delay: 0.7, dx: 14 },
+  { x: 158, d: 3.7, delay: 3.1, dx: -16 }, { x: 170, d: 2.9, delay: 1.8, dx: 6 },
+  { x: 182, d: 4.3, delay: 0.3, dx: -8 }, { x: 194, d: 3.2, delay: 2.2, dx: 12 },
+  { x: 206, d: 4.8, delay: 3.6, dx: -4 }, { x: 218, d: 3.5, delay: 1.0, dx: 10 },
+  { x: 140, d: 4.0, delay: 4.2, dx: 16 }, { x: 176, d: 3.3, delay: 4.6, dx: -14 },
+]
+
+// V ukázkovém režimu jde slide připíchnout adresou (?mock&lf=flame / lf=next / lf=image),
 // aby se dal zkontrolovat bez čekání na rotaci.
 const params = new URLSearchParams(location.search)
 const pinned = params.has('mock') ? params.get('lf') : null
@@ -62,8 +88,42 @@ function pragueTime(iso: string | null): string | null {
 
         <!-- Logo ligy -->
         <div v-if="current.kind === 'brand'" :key="current.key" class="lf-slide lf-brand">
-          <img src="/sponsors/logo.png" class="lf-brand__logo" alt="" />
+          <!-- Jiskry stoupají za logem, logo pomalu „dýchá" září. -->
+          <div class="lf-sparks" aria-hidden="true">
+            <span
+              v-for="(spark, i) in SPARKS"
+              :key="i"
+              class="lf-spark"
+              :style="{ left: spark.x + 'px', '--d': spark.d + 's', '--delay': spark.delay + 's', '--dx': spark.dx + 'px' }"
+            />
+          </div>
+          <div class="lf-brand__mark">
+            <span class="lf-brand__halo" />
+            <img src="/sponsors/logo.png" class="lf-brand__logo" alt="" />
+          </div>
           <span class="lf-brand__name il-fire">INFERNAL LEAGUE</span>
+        </div>
+
+        <!-- Výzva k podpoře ligy -->
+        <div v-else-if="current.kind === 'flame'" :key="current.key" class="lf-slide lf-flame">
+          <div class="lf-sparks" aria-hidden="true">
+            <span
+              v-for="(spark, i) in SPARKS"
+              :key="i"
+              class="lf-spark"
+              :style="{ left: spark.x + 'px', '--d': spark.d + 's', '--delay': spark.delay + 's', '--dx': spark.dx + 'px' }"
+            />
+          </div>
+          <span class="lf-flame__kicker">PODPOŘ LIGU</span>
+          <div class="lf-flame__head">
+            <img v-if="current.badgeUrl" :src="current.badgeUrl" class="lf-flame__badge" alt="" />
+            <img v-else src="/sponsors/logo.png" class="lf-flame__badge" alt="" />
+            <span class="lf-flame__name il-fire">{{ current.name }}</span>
+          </div>
+          <span class="lf-flame__cta">
+            <b>Discord → #subscription</b>
+            nebo v panelu pod streamem
+          </span>
         </div>
 
         <!-- Další zápas večera -->
@@ -95,20 +155,31 @@ function pragueTime(iso: string | null): string | null {
 </template>
 
 <style scoped>
-/* 305 × 221 = šířka po spodní panel a výška spodního pruhu (1 px horní linka
-   + 220 px plochy). Obrázek z adminu vyplní celých 305 × 220. */
+/* 310 × 221 = šířka po spodní panel a výška spodního pruhu (1 px horní linka
+   + 220 px plochy). Obrázek z adminu vyplní celých 310 × 220. */
 .lframe {
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 305px;
+  width: 310px;
   height: 221px;
   overflow: hidden;
   pointer-events: none;
   z-index: 10;
   background: var(--il-surface);
   border-top: 1px solid var(--il-line);
-  border-right: 1px solid var(--il-divider);
+}
+
+/* Svislá ohnivá linka k panelu hráčů, dolů slábne. */
+.lframe::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--il-divider-fire);
+  z-index: 2;
 }
 
 .lf-slide {
@@ -125,6 +196,54 @@ function pragueTime(iso: string | null): string | null {
   gap: 14px;
   background: radial-gradient(ellipse at 50% 42%, var(--il-ember-glow) 0%, transparent 62%);
 }
+.lf-brand__mark {
+  position: relative;
+  width: 104px;
+  height: 104px;
+}
+/* Záře za logem a logo samotné pulzují v jednom rytmu (4 s). */
+.lf-brand__halo {
+  position: absolute;
+  inset: -26px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 120, 20, 0.45) 0%, transparent 62%);
+  animation: lf-halo 4s ease-in-out infinite;
+}
+.lf-brand__mark .lf-brand__logo {
+  position: relative;
+  animation: lf-breathe 4s ease-in-out infinite;
+}
+@keyframes lf-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.045); }
+}
+@keyframes lf-halo {
+  0%, 100% { opacity: 0.25; transform: scale(0.94); }
+  50%      { opacity: 0.75; transform: scale(1.06); }
+}
+
+.lf-sparks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lf-spark {
+  position: absolute;
+  bottom: -6px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #ffb347;
+  box-shadow: 0 0 6px 1px rgba(255, 140, 0, 0.8);
+  opacity: 0;
+  animation: lf-rise var(--d) linear var(--delay) infinite;
+}
+@keyframes lf-rise {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translate(var(--dx), -190px) scale(0.4); opacity: 0; }
+}
+
 .lf-brand__logo {
   width: 104px;
   height: 104px;
@@ -140,6 +259,66 @@ function pragueTime(iso: string | null): string | null {
   color: var(--il-ember);
   /* Mezera za posledním písmenem by text opticky posunula doleva. */
   margin-right: -0.16em;
+}
+
+/* ── Výzva k podpoře (Infernal Flame) ─────────────────────────── */
+.lf-flame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 16px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 46%, var(--il-ember-glow) 0%, transparent 66%);
+}
+.lf-flame__kicker {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  margin-right: -0.22em;
+  color: var(--il-text-dim);
+}
+.lf-flame__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+}
+.lf-flame__badge {
+  width: 58px;
+  height: 58px;
+  flex-shrink: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 0 14px var(--il-ember-glow));
+}
+.lf-flame__name {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 0.95;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--il-ember);
+}
+.lf-flame__cta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.15;
+  color: var(--il-text-dim);
+}
+.lf-flame__cta b {
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: 0.02em;
+  color: var(--il-text);
 }
 
 /* ── Další zápas ───────────────────────────────────────────────── */

@@ -48,6 +48,25 @@ export interface OverlayContext {
   players: { blue: OverlayPlayer[]; red: OverlayPlayer[] }
   nextMatch: { scheduledAt: string | null; teamA: OverlayBriefTeam; teamB: OverlayBriefTeam } | null
   slides: Array<{ id: string; url: string; name: string }>
+  /** Vyšší stupeň podpory (Infernal Flame) pro výzvu v L-Framu; null = vypnutý.
+   *  Starší web pole neposílá — L-Frame si pak vezme výchozí název. */
+  supporter?: { name: string; badgeUrl: string | null } | null
+  /** Milníky v lize: součty hráčů z dřívějších her a rekordy jedné hry.
+   *  Starší web pole neposílá — milníky se pak neukazují. */
+  league?: OverlayLeagueStats
+}
+
+export interface OverlayCareer {
+  games: number
+  kills: number
+  deaths: number
+  assists: number
+  pentakills: number
+}
+
+export interface OverlayLeagueStats {
+  players: Record<string, OverlayCareer>
+  records: { games: number; kills: number | null; assists: number | null; deaths: number | null }
 }
 
 const REFRESH_MS = 4_000
@@ -119,6 +138,21 @@ export function nickFor(
   return players.length === 5 ? (players[slot]?.nick ?? '') : ''
 }
 
+/** Hráč ze sestavy na pozici `slot` — stejné párování jako `nickFor`. */
+export function playerFor(
+  players: OverlayPlayer[] | undefined,
+  slot: number,
+  championAlias: string | null | undefined,
+): OverlayPlayer | null {
+  if (!players?.length) return null
+  const alias = championId(championAlias)
+  if (alias) {
+    const byChampion = players.find((p) => championId(p.championKey) === alias)
+    if (byChampion) return byChampion
+  }
+  return players.length === 5 ? (players[slot] ?? null) : null
+}
+
 /** Ukázková data pro `?mock` (adresou jdou přepsat názvy týmů a formát). */
 function mockContext(): OverlayContext {
   const params = new URLSearchParams(location.search)
@@ -150,5 +184,9 @@ function mockContext(): OverlayContext {
       teamB: { name: 'SMOLDER', tag: 'SMO', logoUrl: null },
     },
     slides: [{ id: 'dev', url: '/dev-bg.png', name: 'Ukázka' }],
+    supporter: {
+      name: 'Infernal Flame',
+      badgeUrl: 'https://ldhxoxqewajqgqashyuv.supabase.co/storage/v1/object/public/assets/supporter_badge/1790784931375-6fbee827.png',
+    },
   }
 }

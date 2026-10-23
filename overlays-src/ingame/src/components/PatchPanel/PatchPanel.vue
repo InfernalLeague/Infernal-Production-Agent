@@ -229,11 +229,10 @@ function inhibFill(inhib: InhibRow, gt: number): number {
   position: absolute;
   right: 221px;
   bottom: 0;
-  width: 84px;
+  width: 89px;
   height: 221px;
   background: var(--il-surface);
   border-top: 1px solid var(--il-line);
-  border-left: 1px solid var(--il-divider);
   --strip-delay: 120ms;
   display: flex;
   align-items: center;
@@ -241,6 +240,18 @@ function inhibFill(inhib: InhibRow, gt: number): number {
   pointer-events: none;
   z-index: 10;
   overflow: hidden;
+}
+
+/* Svislá ohnivá linka k panelu hráčů, dolů slábne. */
+.ppanel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--il-divider-fire);
+  z-index: 2;
 }
 
 /* ── Patch (default) ─────────────────────────────────────────── */
