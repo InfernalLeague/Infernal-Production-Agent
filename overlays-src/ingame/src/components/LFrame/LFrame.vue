@@ -17,8 +17,7 @@ const match = useMatchContext()
 // sponzora nepotřebuje nové vydání agenta. Obrázek vyplní celou plochu,
 // v adminu se proto doporučuje 620 × 440 px.
 //
-// Rotace jede na sdílených hodinách (useSlideshowClock), stejně jako panel
-// vedle minimapy, takže se obě místa přepínají ve stejný okamžik.
+// Rotace jede na sdílených hodinách (useSlideshowClock).
 
 type Slide =
   | { kind: 'brand'; key: string }

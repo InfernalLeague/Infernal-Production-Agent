@@ -1,18 +1,10 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 // ── Shared slideshow clock ──────────────────────────────────────────────────
-// The overlay has two rotating slideshows that must advance in lockstep:
-//   · LFrame  — sponsor banners (bottom-left L frame)
-//   · PatchPanel — SEASON / SPLIT / ČTVRTFINÁLE labels next to the minimap
-//
-// Previously each ran its own setInterval at a different cadence, so they drifted
-// apart within seconds. Instead of two timers, a SINGLE module-level interval
-// increments `tick`; every consumer derives its own slide index as
-// `tick % slides.length`. Because they all read the same counter, they change on
-// the exact same beat no matter how many slides each one has.
-//
-// The LFrame banner rotation is the master cadence — this is the period both
-// slideshows follow.
+// A SINGLE module-level interval increments `tick`; every rotating slideshow
+// (today the LFrame sponsor banners) derives its slide index as
+// `tick % slides.length`, so any slideshows added later change on the same beat.
+// (PatchPanel next to the minimap used to rotate too; it now shows a fixed label.)
 export const SLIDE_CYCLE_MS = 10_000
 
 const tick = ref(0)

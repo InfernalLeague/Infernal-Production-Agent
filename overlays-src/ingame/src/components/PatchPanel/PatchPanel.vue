@@ -1,31 +1,14 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useIsInGame, useIngameSelector } from '@/composables/useIngame'
-import { useSlideshowClock } from '@/composables/useSlideshowClock'
-import { useMatchContext } from '@/composables/useMatchContext'
 
 const isInGame = useIsInGame()
 
-// ── Slideshow (výchozí pohled) ───────────────────────────────────────────────
-// Dokud nepadne inhibitor, střídá panel název splitu a fázi: v základní části
-// týden („3. TÝDEN"), v play-off kolo („ČTVRTFINÁLE"). Obojí posílá web přes
-// agenta (useMatchContext), nic se nepřepisuje ručně. Rotace jede na sdílených
-// hodinách (useSlideshowClock), takže se přepíná ve stejný okamžik jako L-Frame.
-const match = useMatchContext()
-const slides = computed(() => {
-  const list = [match.value?.splitName, match.value?.stage]
-    .filter((text): text is string => Boolean(text))
-    .map((text) => text.toLocaleUpperCase('cs'))
-  return list.length ? list : ['INFERNAL LEAGUE']
-})
-const tick = useSlideshowClock()
-const currentSlide = computed(() => slides.value[tick.value % slides.value.length])
-// Panel je vysoký 221 px a text běží svisle. Do 9 znaků (např. „SPLIT 0.5")
-// se vejde 30 px, delší kola („ČTVRTFINÁLE") se úměrně zmenší.
-const slideFontSize = computed(() => {
-  const length = currentSlide.value.length
-  return length <= 9 ? 30 : Math.max(20, Math.floor(30 * 9 / length))
-})
+// ── Výchozí pohled ───────────────────────────────────────────────────────────
+// Dokud nepadne inhibitor, svítí v panelu napevno název splitu. Dřív se tu
+// střídal split a fáze přes slideshow, jenže na streamu panel často zůstával
+// prázdný, takže zůstává jen statický nápis bez animované výměny.
+const PANEL_TEXT = 'SPLIT 0.5'
 
 // ── Inhibitor timers ───────────────────────────────────────────────────────
 const gameTime      = useIngameSelector((s) => s.gameData?.gameTime ?? 0, 0)
@@ -209,11 +192,9 @@ function inhibFill(inhib: InhibRow, gt: number): number {
 
         </div>
 
-        <!-- ── Slideshow view (default) ─────────────────────────────── -->
+        <!-- ── Název splitu (default) ───────────────────────────────── -->
         <div v-else key="slides" class="ppanel__patch">
-          <Transition name="swap" mode="out-in">
-            <span :key="currentSlide" class="ppanel__text il-fire il-fire--vertical" :style="{ fontSize: slideFontSize + 'px' }">{{ currentSlide }}</span>
-          </Transition>
+          <span class="ppanel__text il-fire il-fire--vertical">{{ PANEL_TEXT }}</span>
         </div>
 
       </Transition>
@@ -382,7 +363,4 @@ function inhibFill(inhib: InhibRow, gt: number): number {
 .view-leave-active { transition: opacity var(--il-out) ease, transform var(--il-out) var(--il-ease-in); }
 .view-enter-from,
 .view-leave-to     { opacity: 0; transform: translateX(84px); }
-
-/* Slideshow crossfade between labels (opacity only — the label keeps its
-   rotate(180deg) base transform, so we must not animate transform here) */
 </style>
