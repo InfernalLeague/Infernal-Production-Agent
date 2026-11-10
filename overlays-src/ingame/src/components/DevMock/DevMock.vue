@@ -127,6 +127,7 @@ const MOCK_SCOREBOARD_BOTTOM = {
           kills: 12, deaths: 10, assists: 14, level: 9, gold: 2100, totalGold: 9200, creepScore: 245, visionScore: 12, shutdown: 450,
           items: [
             mkItem(3083, 0), mkItemCd(3026, 1, 40, 90), // slot 1 on 40% cooldown
+            { ...mkItem(2003, 2), count: 3 }, // 3× Health Potion → tests item count badge
             mkItemCd(3340, 6, 25, 90), // trinket on 25% cooldown
             mkItemCd(3513, 8, 55, 240), // quest teleport (slot 8) on cooldown → tests quest-slot TP countdown
           ],
@@ -138,6 +139,7 @@ const MOCK_SCOREBOARD_BOTTOM = {
           respawnAt: GT + 12, // dead — 12 s until respawn (tests death timer)
           items: [
             mkItem(3078, 0), mkItem(3071, 1),
+            { ...mkItem(2055, 2), count: 2 }, // 2× Control Ward
             mkItem(3340, 6), // trinket
           ],
         },

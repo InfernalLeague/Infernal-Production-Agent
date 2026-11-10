@@ -249,6 +249,9 @@ function normPlayer(sbPlayer: any, tabPlayer: any, wsTabPlayer: any, gt: number,
     const cdPct     = ready ? 100 : Math.round((1 - remaining / total) * 100)
     const id        = item.id ?? 0
     const rawStacks = item.stacks ?? 0
+    // Počet kusů ve slotu (Health Potion, Control Ward, sušenky…). Jeden kus
+    // se nepíše, číslo má smysl až od dvou.
+    const count = Number.isFinite(item.count) && item.count > 1 ? item.count : null
     return {
       imageUrl: resolveUrl(item.assetUrl),
       ready,
@@ -260,7 +263,8 @@ function normPlayer(sbPlayer: any, tabPlayer: any, wsTabPlayer: any, gt: number,
       cost: item.cost ?? 0,
       isOrnn: isOrnnUpgrade(id, item.modifierUrl),
       // Only surface stacks for items where the count is meaningful to viewers.
-      stacks: STACK_ITEM_IDS.has(id) && rawStacks > 0 ? rawStacks : null,
+      // Stacky itemu mají přednost, jinak počet kusů.
+      stacks: STACK_ITEM_IDS.has(id) && rawStacks > 0 ? rawStacks : count,
     }
   }
 
@@ -723,6 +727,7 @@ function tpCd(sec: number): string {
               </svg>
               <span v-if="player.roleQuestItem && !player.roleQuestItem.ready && player.roleQuestItem.remaining > 0"
                 class="plyr__cd-num plyr__cd-num--tp">{{ tpCd(player.roleQuestItem.remaining) }}</span>
+              <span v-else-if="player.roleQuestItem?.stacks != null" class="plyr__item-stacks">{{ player.roleQuestItem.stacks }}</span>
             </div>
 
             <!-- ③–⑦ Stat group: Items | CS | KDA | Spells | Ult (equal 8px gaps) -->
@@ -1026,6 +1031,7 @@ function tpCd(sec: number): string {
               </svg>
               <span v-if="player.roleQuestItem && !player.roleQuestItem.ready && player.roleQuestItem.remaining > 0"
                 class="plyr__cd-num plyr__cd-num--tp">{{ tpCd(player.roleQuestItem.remaining) }}</span>
+              <span v-else-if="player.roleQuestItem?.stacks != null" class="plyr__item-stacks">{{ player.roleQuestItem.stacks }}</span>
             </div>
 
             <!-- ① Trinket -->
@@ -1702,7 +1708,7 @@ function tpCd(sec: number): string {
   }
 }
 
-/* ── Item stack counter (Dark Seal / Mejai's / trinket vision-score) ─── */
+/* ── Item stack counter (Dark Seal / Mejai's / počet kusů / trinket vision-score) ─── */
 /* Jen číslo, bez rámečku — čitelnost drží obrys ze stínu ve čtyřech směrech,
    stejně jako u odpočtů cooldownů. Bez rámečku může být číslo větší. */
 .plyr__item-stacks {
