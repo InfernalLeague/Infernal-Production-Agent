@@ -1,7 +1,7 @@
 import type { GameManager } from "./GameManager.js";
 import type { Side } from "../types.js";
 import { log } from "../util/logger.js";
-import { fetchSchedule, type WebGame, type WebMatch } from "../web/WebClient.js";
+import { fetchSchedule, reopenGame, type WebGame, type WebMatch } from "../web/WebClient.js";
 import {
   adoptLegacyToken,
   loadWebSettings,
@@ -33,6 +33,8 @@ interface ProgramGame {
   /** done = má vítěze, current = právě ji Agent sbírá, next = na řadě, upcoming = později. */
   state: "done" | "current" | "next" | "upcoming" | "annulled" | "admin" | "pending";
   winner: string | null;
+  /** Jde se k ní vrátit (Agent ji předčasně ukončil nebo zapsal). */
+  canReturn: boolean;
 }
 
 /**
@@ -166,6 +168,7 @@ export class Autopilot {
     if (status === "LIVE") return;
     if (current && (status === "WAITING_FOR_GAME" || status === "CREATED")) {
       if (!current.meta.auto) return; // hru založil operátor ručně — nesahat
+      if (current.meta.pinned) return; // operátor se k hře vrátil — čeká na ni
       if (!next) return;
       if (current.meta.web?.gameId === next.game.id) {
         this.manager.updateWaitingGame(this.gameFields(next.match, next.game));
@@ -181,22 +184,77 @@ export class Autopilot {
         ? current.finalSnapshot?.durationSeconds ?? null
         : current?.meta.previousDuration ?? null;
     try {
-      this.manager.createGame({
-        ...this.gameFields(next.match, next.game),
-        gameNumber: next.game.number,
-        production: PRODUCTION_LABEL[this.production],
-        web: {
-          gameId: next.game.id,
-          matchId: next.match.id,
-          label: `${next.match.teamA!.name} vs ${next.match.teamB!.name} · Game ${next.game.number}`,
-          production: this.production,
-        },
-        auto: true,
-        previousDuration,
-      });
+      this.manager.createGame({ ...this.gameInput(next.match, next.game, this.production), previousDuration });
     } catch (error) {
       log.warn(`Autopilot hru nezaložil: ${(error as Error).message}`);
     }
+  }
+
+  /** Hra programu, jak ji Agent zakládá (týmy, strany, napojení na web). */
+  private gameInput(match: WebMatch, game: WebGame, production: ProductionKey) {
+    return {
+      ...this.gameFields(match, game),
+      gameNumber: game.number,
+      production: PRODUCTION_LABEL[production],
+      web: {
+        gameId: game.id,
+        matchId: match.id,
+        label: `${match.teamA!.name} vs ${match.teamB!.name} · Game ${game.number}`,
+        production,
+      },
+      auto: true,
+    };
+  }
+
+  /**
+   * Jde se k hře vrátit? Jen k hře z programu, kterou smí Agent zapsat
+   * (ne anulované, ne převzaté adminem, ne v zrušeném zápase), a jen když
+   * Agent právě nic nesbírá. Hra, na kterou Agent už čeká, návrat nepotřebuje.
+   */
+  private canReturnTo(match: WebMatch, game: WebGame): boolean {
+    if (match.status === "forfeit" || match.status === "cancelled" || !match.teamA || !match.teamB) return false;
+    if (game.status === "annulled" || game.resultSource === "admin") return false;
+    const current = this.manager.currentSession();
+    if (current?.status === "LIVE") return false;
+    const isCurrent = current?.meta.web?.gameId === game.id;
+    if (isCurrent) return current!.status === "GAME_ENDED" || current!.status === "EXPORTED";
+    // Hry s výsledkem od Agenta; hry bez výsledku zakládá autopilot sám.
+    return Boolean(game.winnerTeamId) && game.resultSource === "agent";
+  }
+
+  /**
+   * Návrat ke hře, kterou Agent předčasně ukončil (spadl spectator,
+   * restart…) a autopilot mezitím přešel dál. Web hru znovu otevře
+   * (zruší předčasný výsledek), Agent ji založí znovu a čeká na data
+   * z běžící hry. Autopilot ji nevymění, dokud se nedohraje a výsledek
+   * není na webu — pak pokračuje programem jako dřív.
+   */
+  async returnToGame(gameId: string): Promise<void> {
+    const production = this.production;
+    if (!production) throw new Error("Vyber produkci.");
+    let found: { match: WebMatch; game: WebGame } | null = null;
+    for (const match of this.matches) {
+      const game = match.games.find((g) => g.id === gameId);
+      if (game) found = { match, game };
+    }
+    if (!found) throw new Error("Hra není v dnešním programu.");
+    if (this.manager.currentSession()?.status === "LIVE") {
+      throw new Error("Právě běží hra. Návrat by přepsal rozpracovaná data.");
+    }
+    if (!this.canReturnTo(found.match, found.game)) throw new Error("K této hře se vrátit nejde.");
+
+    const { match, game } = found;
+    if (game.winnerTeamId || game.status === "confirmed") {
+      await reopenGame(game.id, production);
+      log.info(`Hra ${match.teamA!.name} vs ${match.teamB!.name} G${game.number} znovu otevřená na webu.`);
+    }
+    this.manager.createGame({
+      ...this.gameInput(match, game, production),
+      previousDuration: null,
+      pinned: true,
+      force: true,
+    });
+    void this.refresh();
   }
 
   private gameFields(match: WebMatch, game: WebGame) {
@@ -226,7 +284,7 @@ export class Autopilot {
         published: match.published,
       };
       if (match.games.length === 0) {
-        program.push({ ...base, gameId: null, number: null, state: "pending", winner: null });
+        program.push({ ...base, gameId: null, number: null, state: "pending", winner: null, canReturn: false });
         continue;
       }
       for (const game of [...match.games].sort((a, b) => a.number - b.number)) {
@@ -242,7 +300,9 @@ export class Autopilot {
           : game.resultSource === "admin" ? "admin"
           : next?.game.id === game.id ? "next"
           : "upcoming";
-        program.push({ ...base, gameId: game.id, number: game.number, state, winner });
+        program.push({
+          ...base, gameId: game.id, number: game.number, state, winner, canReturn: this.canReturnTo(match, game),
+        });
       }
     }
     return {

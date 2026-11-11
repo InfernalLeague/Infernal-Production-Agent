@@ -254,6 +254,25 @@
     </div>
   </div>
 
+  <!-- RETURN TO GAME MODAL -->
+  <div id="returnModal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Vrátit se ke hře</h2>
+        <button id="closeReturn" class="modal-close" aria-label="Zavřít">✕</button>
+      </div>
+      <p class="upd-body"><strong id="returnLabel"></strong></p>
+      <p class="hint" id="returnText"></p>
+      <div class="modal-actions">
+        <p class="hint err" id="returnHint"></p>
+        <div class="export-actions">
+          <button id="returnCancel" class="btn btn-ghost">Zrušit</button>
+          <button id="returnConfirm" class="btn btn-primary">Vrátit se a zapisovat</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- UPDATE MODAL -->
   <div id="updateModal" class="modal" hidden>
     <div class="modal-card">

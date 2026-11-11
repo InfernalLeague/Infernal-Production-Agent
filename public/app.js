@@ -279,10 +279,54 @@ $("programList").addEventListener("click", (e) => {
     if (state) render(state);
     return;
   }
+  const back = e.target.closest("[data-return]");
+  if (back) {
+    openReturn(back.dataset.return);
+    return;
+  }
   const team = e.target.closest("[data-prev-team]")?.dataset.prevTeam;
   if (team) post("/api/game/winner", { winner: team, which: "previous" });
   if (e.target.closest("[data-prev-resend]")) post("/api/game/sync", { which: "previous" });
 });
+
+// --- návrat ke hře (modal) ----------------------------------------------------
+// Agent hru předčasně ukončil (spadl spectator, restart) a autopilot přešel
+// dál. Po potvrzení web hru znovu otevře a Agent k ní zase zapisuje.
+let returnGameId = null;
+function openReturn(gameId) {
+  const g = ((state && state.autopilot && state.autopilot.program) || []).find((x) => x.gameId === gameId);
+  if (!g) return;
+  returnGameId = gameId;
+  $("returnLabel").textContent = `${g.teamA} vs ${g.teamB} · Game ${g.number || 1}`;
+  const sess = state.session;
+  const drop = sess && sess.meta.web && sess.meta.web.gameId !== gameId
+    ? ` Agent přestane čekat na ${sess.meta.web.label || "aktuální hru"}; autopilot ji připraví znovu, až se tahle hra dohraje.`
+    : "";
+  $("returnText").textContent = (g.winner
+    ? `Hra má na webu zapsaný výsledek (🏆 ${g.winner}). Web ho zruší a hra se znovu otevře — skóre série se přepočítá. Už vyhodnocenou Twitch predikci to nevrátí.`
+    : "Agent hru znovu založí a začne k ní zapisovat.") +
+    " Jakmile spectator zase ukáže běžící hru, Agent ji chytí a po jejím konci zapíše skutečný výsledek." + drop;
+  $("returnHint").textContent = "";
+  $("returnConfirm").disabled = false;
+  $("returnModal").hidden = false;
+}
+function closeReturn() { $("returnModal").hidden = true; returnGameId = null; }
+$("closeReturn").onclick = closeReturn;
+$("returnCancel").onclick = closeReturn;
+$("returnModal").addEventListener("click", (e) => { if (e.target.id === "returnModal") closeReturn(); });
+$("returnConfirm").onclick = async () => {
+  if (!returnGameId) return;
+  $("returnConfirm").disabled = true;
+  $("returnHint").textContent = "";
+  const { ok, data } = await post("/api/game/return", { gameId: returnGameId });
+  if (!ok) {
+    $("returnHint").textContent = data.error || "Návrat se nepovedl.";
+    $("returnConfirm").disabled = false;
+    return;
+  }
+  closeReturn();
+  toast("Vráceno ke hře — čekám na data ze spectatoru.", "ok");
+};
 
 // --- toast ------------------------------------------------------------------
 function toast(msg, type) {
@@ -413,6 +457,7 @@ function programGame(g, prev, prevGameId) {
   const canFix = g.gameId && g.gameId === prevGameId;
   let html = `<div class="pg ${g.state}"><span class="pg-n">${esc(label)}</span><span class="pg-s">${esc(status)}</span>` +
     (canFix ? `<button class="pg-fix" data-fix="${esc(g.gameId)}">${fixOpen === g.gameId ? "Zavřít" : "Opravit"}</button>` : "") +
+    (g.canReturn ? `<button class="pg-fix" data-return="${esc(g.gameId)}" title="Hra dál běží — znovu ji otevřít a zapisovat">↩ Vrátit se</button>` : "") +
     `</div>`;
   if (canFix && fixOpen === g.gameId) {
     const sync = prev.webSync || { state: "idle" };

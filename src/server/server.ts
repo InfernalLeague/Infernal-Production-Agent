@@ -128,6 +128,18 @@ export function startServer(manager: GameManager, autopilot: Autopilot): void {
     }
   });
 
+  // Návrat ke hře z programu (Agent ji předčasně ukončil, hra dál běží).
+  app.post("/api/game/return", async (req, res) => {
+    try {
+      const gameId = typeof req.body?.gameId === "string" ? req.body.gameId : "";
+      if (!gameId) return res.status(400).json({ error: "Chybí hra." });
+      await autopilot.returnToGame(gameId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(409).json({ error: (err as Error).message });
+    }
+  });
+
   app.post("/api/game/sync", (req, res) => {
     manager.resendResult(whichGame(req.body?.which));
     res.json({ ok: true });

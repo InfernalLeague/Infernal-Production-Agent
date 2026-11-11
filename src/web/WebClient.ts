@@ -7,6 +7,7 @@ import { loadWebSettings, tokenFor, type ProductionKey } from "./settings.js";
  *   GET  /api/agent/schedule?date=RRRR-MM-DD   — zápasy produkce v daný den
  *   POST /api/agent/games/{id}/result          — výsledek hry (confirmed.json)
  *   POST /api/agent/games/{id}/live            — živý stav běžící hry
+ *   POST /api/agent/games/{id}/reopen          — návrat k předčasně zapsané hře
  *
  * Web výsledek zapíše a hru rovnou potvrdí. Chyby rozlišujeme na
  * „zkus znovu“ (síť, 5xx) a „odmítnuto“ (4xx s českou hláškou z webu —
@@ -133,6 +134,21 @@ export async function submitLive(
     { confirmed, gameTime },
     production,
   );
+}
+
+/**
+ * Návrat ke hře, kterou agent předčasně ukončil a zapsal: web zruší
+ * potvrzení, vítěze i délku, aby šel zase zapisovat živý stav. Hra bez
+ * výsledku zůstane, jak je (`reopened: false`).
+ */
+export async function reopenGame(gameId: string, production?: ProductionKey | null): Promise<{ reopened: boolean }> {
+  const data = await request<{ ok: true; result: { reopened: boolean } }>(
+    "POST",
+    `/api/agent/games/${encodeURIComponent(gameId)}/reopen`,
+    {},
+    production,
+  );
+  return data.result;
 }
 
 export async function submitResult(

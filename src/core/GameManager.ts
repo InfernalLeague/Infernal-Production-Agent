@@ -96,16 +96,35 @@ export class GameManager extends EventEmitter {
     return this.session;
   }
 
-  createGame(input: CreateGameInput & { auto?: boolean; previousDuration?: number | null }): GameMeta {
-    if (!this.canReplaceSession()) {
-      throw new Error(
-        this.session?.status === "LIVE"
-          ? "Právě běží hra. Nová hra by přepsala rozpracovaná data."
-          : "Aktuální hra čeká na vítěze nebo na zápis na web. Nejdřív ji dokonči.",
-      );
+  createGame(
+    input: CreateGameInput & {
+      auto?: boolean;
+      previousDuration?: number | null;
+      pinned?: boolean;
+      /**
+       * Návrat ke hře: operátor potvrdil, že aktuální hru (čekající nebo
+       * předčasně ukončenou) zahodí. Běžící hru nenahradí nikdy.
+       */
+      force?: boolean;
+    },
+  ): GameMeta {
+    if (this.session?.status === "LIVE") {
+      throw new Error("Právě běží hra. Nová hra by přepsala rozpracovaná data.");
+    }
+    if (!input.force && !this.canReplaceSession()) {
+      throw new Error("Aktuální hra čeká na vítěze nebo na zápis na web. Nejdřív ji dokonči.");
     }
     const ended = this.session;
-    if (ended?.meta.web && ended.finalSnapshot) this.previous = ended;
+    const returning = input.web?.gameId ?? null;
+    // Hra, ke které se operátor vrací, už nesmí odesílat svůj předčasný výsledek.
+    for (const old of [ended, this.previous]) {
+      if (old && returning && old.meta.web?.gameId === returning && old.syncTimer) {
+        clearTimeout(old.syncTimer);
+        old.syncTimer = null;
+      }
+    }
+    if (ended?.meta.web && ended.finalSnapshot && ended.meta.web.gameId !== returning) this.previous = ended;
+    if (this.previous && returning && this.previous.meta.web?.gameId === returning) this.previous = null;
     const team1 = input.team1.trim();
     const team2 = input.team2.trim();
     if (!team1 || !team2) throw new Error("Názvy obou týmů jsou povinné.");
@@ -127,6 +146,7 @@ export class GameManager extends EventEmitter {
       web: input.web ?? null,
       auto: input.auto ?? false,
       previousDuration: input.previousDuration ?? null,
+      pinned: input.pinned ?? false,
     };
     const folder = gameFolder(createdAt, meta.team1, meta.team2, meta.gameNumber, meta.localGameId);
     fs.mkdirSync(folder, { recursive: true });
@@ -135,7 +155,7 @@ export class GameManager extends EventEmitter {
     this.damage = { fields: new Set(), samples: 0, lastWrittenAt: 0 };
     this.publisher.beginGame(meta, folder);
     log.info(
-      `Nová hra${meta.auto ? " (autopilot)" : ""}: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`,
+      `${meta.pinned ? "Návrat ke hře" : `Nová hra${meta.auto ? " (autopilot)" : ""}`}: ${meta.localGameId} (${meta.team1} vs ${meta.team2}, G${meta.gameNumber})`,
     );
     this.emitUpdate();
     return meta;

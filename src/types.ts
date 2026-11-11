@@ -85,6 +85,11 @@ export interface CreateGameInput {
    * pozná podle herního času pod touto hodnotou (nebo po výpadku API).
    */
   previousDuration?: number | null;
+  /**
+   * Operátor se k hře vrátil ručně (Vrátit se v programu). Autopilot ji
+   * nevymění za jinou, dokud se nedohraje a výsledek není na webu.
+   */
+  pinned?: boolean;
 }
 
 /** Interní identifikace hry (workflow §6). NEpoužíváme League Game ID. */
@@ -101,6 +106,7 @@ export interface GameMeta {
   web?: WebGameLink | null;
   auto?: boolean;
   previousDuration?: number | null;
+  pinned?: boolean;
 }
 
 /**
