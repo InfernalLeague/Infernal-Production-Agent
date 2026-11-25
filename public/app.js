@@ -302,10 +302,14 @@ function openReturn(gameId) {
   const drop = sess && sess.meta.web && sess.meta.web.gameId !== gameId
     ? ` Agent přestane čekat na ${sess.meta.web.label || "aktuální hru"}; autopilot ji připraví znovu, až se tahle hra dohraje.`
     : "";
-  $("returnText").textContent = (g.winner
-    ? `Hra má na webu zapsaný výsledek (🏆 ${g.winner}). Web ho zruší a hra se znovu otevře — skóre série se přepočítá. Už vyhodnocenou Twitch predikci to nevrátí.`
-    : "Agent hru znovu založí a začne k ní zapisovat.") +
-    " Jakmile spectator zase ukáže běžící hru, Agent ji chytí a po jejím konci zapíše skutečný výsledek." + drop;
+  $("returnText").textContent = g.provisional
+    ? `Hra má na webu prozatímní výsledek (🏆 ${g.winner}). Zůstane potvrzená — skóre série ani postup se nemění. ` +
+      "Pusť replay (.rofl) od začátku: Agent ho chytí jako běžící hru a po jeho konci zapíše statistiky, které prozatímní výsledek přepíšou. " +
+      "Před odesláním zkontroluj vítěze." + drop
+    : (g.winner
+      ? `Hra má na webu zapsaný výsledek (🏆 ${g.winner}). Web ho zruší a hra se znovu otevře — skóre série se přepočítá. Už vyhodnocenou Twitch predikci to nevrátí.`
+      : "Agent hru znovu založí a začne k ní zapisovat.") +
+      " Jakmile spectator zase ukáže běžící hru, Agent ji chytí a po jejím konci zapíše skutečný výsledek." + drop;
   $("returnHint").textContent = "";
   $("returnConfirm").disabled = false;
   $("returnModal").hidden = false;
@@ -457,7 +461,7 @@ function programGame(g, prev, prevGameId) {
   const canFix = g.gameId && g.gameId === prevGameId;
   let html = `<div class="pg ${g.state}"><span class="pg-n">${esc(label)}</span><span class="pg-s">${esc(status)}</span>` +
     (canFix ? `<button class="pg-fix" data-fix="${esc(g.gameId)}">${fixOpen === g.gameId ? "Zavřít" : "Opravit"}</button>` : "") +
-    (g.canReturn ? `<button class="pg-fix" data-return="${esc(g.gameId)}" title="Hra dál běží — znovu ji otevřít a zapisovat">↩ Vrátit se</button>` : "") +
+    (g.canReturn ? `<button class="pg-fix" data-return="${esc(g.gameId)}" title="${g.provisional ? "Zapsat statistiky z replaye" : "Hra dál běží — znovu ji otevřít a zapisovat"}">↩ Vrátit se</button>` : "") +
     `</div>`;
   if (canFix && fixOpen === g.gameId) {
     const sync = prev.webSync || { state: "idle" };

@@ -33,8 +33,13 @@ interface ProgramGame {
   /** done = má vítěze, current = právě ji Agent sbírá, next = na řadě, upcoming = později. */
   state: "done" | "current" | "next" | "upcoming" | "annulled" | "admin" | "pending";
   winner: string | null;
-  /** Jde se k ní vrátit (Agent ji předčasně ukončil nebo zapsal). */
+  /** Jde se k ní vrátit (Agent ji předčasně ukončil nebo zapsal, nebo má prozatímní výsledek). */
   canReturn: boolean;
+  /**
+   * Výsledek zapsaný ručně jako prozatímní (vítěz a délka, statistiky
+   * doplní Agent třeba z replaye). Návrat ji na webu neotevírá.
+   */
+  provisional: boolean;
 }
 
 /**
@@ -210,6 +215,8 @@ export class Autopilot {
    * Jde se k hře vrátit? Jen k hře z programu, kterou smí Agent zapsat
    * (ne anulované, ne převzaté adminem, ne v zrušeném zápase), a jen když
    * Agent právě nic nesbírá. Hra, na kterou Agent už čeká, návrat nepotřebuje.
+   * Patří sem i hry s prozatímním výsledkem (spectate nešel, vítěz a délka
+   * zapsané ručně) — statistiky k nim Agent doplní z replaye.
    */
   private canReturnTo(match: WebMatch, game: WebGame): boolean {
     if (match.status === "forfeit" || match.status === "cancelled" || !match.teamA || !match.teamB) return false;
@@ -218,8 +225,8 @@ export class Autopilot {
     if (current?.status === "LIVE") return false;
     const isCurrent = current?.meta.web?.gameId === game.id;
     if (isCurrent) return current!.status === "GAME_ENDED" || current!.status === "EXPORTED";
-    // Hry s výsledkem od Agenta; hry bez výsledku zakládá autopilot sám.
-    return Boolean(game.winnerTeamId) && game.resultSource === "agent";
+    // Hry s výsledkem (od Agenta i prozatímním); hry bez výsledku zakládá autopilot sám.
+    return Boolean(game.winnerTeamId);
   }
 
   /**
@@ -228,6 +235,11 @@ export class Autopilot {
    * (zruší předčasný výsledek), Agent ji založí znovu a čeká na data
    * z běžící hry. Autopilot ji nevymění, dokud se nedohraje a výsledek
    * není na webu — pak pokračuje programem jako dřív.
+   *
+   * Hru s prozatímním výsledkem (ne od Agenta) web neotevírá: jde o replay
+   * dohrané hry, série i postup v playoff mají zůstat, jak jsou. Živý stav
+   * k potvrzené hře web zahodí a výsledek po konci replaye ji přepíše
+   * statistikami.
    */
   async returnToGame(gameId: string): Promise<void> {
     const production = this.production;
@@ -244,7 +256,9 @@ export class Autopilot {
     if (!this.canReturnTo(found.match, found.game)) throw new Error("K této hře se vrátit nejde.");
 
     const { match, game } = found;
-    if (game.winnerTeamId || game.status === "confirmed") {
+    if (isProvisional(game)) {
+      log.info(`Hra ${match.teamA!.name} vs ${match.teamB!.name} G${game.number}: prozatímní výsledek, čekám na replay.`);
+    } else if (game.winnerTeamId || game.status === "confirmed") {
       await reopenGame(game.id, production);
       log.info(`Hra ${match.teamA!.name} vs ${match.teamB!.name} G${game.number} znovu otevřená na webu.`);
     }
@@ -284,7 +298,7 @@ export class Autopilot {
         published: match.published,
       };
       if (match.games.length === 0) {
-        program.push({ ...base, gameId: null, number: null, state: "pending", winner: null, canReturn: false });
+        program.push({ ...base, gameId: null, number: null, state: "pending", winner: null, canReturn: false, provisional: false });
         continue;
       }
       for (const game of [...match.games].sort((a, b) => a.number - b.number)) {
@@ -302,6 +316,7 @@ export class Autopilot {
           : "upcoming";
         program.push({
           ...base, gameId: game.id, number: game.number, state, winner, canReturn: this.canReturnTo(match, game),
+          provisional: isProvisional(game),
         });
       }
     }
@@ -315,6 +330,11 @@ export class Autopilot {
       nextLabel: next ? `${next.match.teamA!.name} vs ${next.match.teamB!.name} · Game ${next.game.number}` : null,
     };
   }
+}
+
+/** Výsledek zapsaný mimo Agenta (ručně jako prozatímní), ne adminem. */
+function isProvisional(game: WebGame): boolean {
+  return Boolean(game.winnerTeamId) && game.resultSource !== "agent" && game.resultSource !== "admin";
 }
 
 /** Dnešní den v Praze; po půlnoci (do 6:00) i včerejšek — zápas mohl přetáhnout. */
